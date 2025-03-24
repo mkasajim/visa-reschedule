@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Visa Reschedule Assistant</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    h3 {
+      margin-top: 15px;
+      margin-bottom: 10px;
+      color: #444;
+    }
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      margin: 15px 0;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #2196F3;
+    }
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+    .toggle-label {
+      margin-left: 10px;
+      font-weight: bold;
+    }
+    .status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 5px;
+      background-color: #f5f5f5;
+      font-size: 14px;
+    }
+    .credentials-container {
+      margin-top: 15px;
+    }
+    .credentials-container input {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    .btn-save {
+      background-color: #4CAF50;
+      color: white;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      float: right;
+    }
+    .btn-save:hover {
+      background-color: #45a049;
+    }
+    .api-keys-container {
+      margin-top: 15px;
+      border-top: 1px solid #ddd;
+      padding-top: 15px;
+    }
+    .captcha-method {
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Visa Reschedule Assistant</h2>
+  
+  <div class="credentials-container">
+    <h3>Login Credentials</h3>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button id="saveCredentials" class="btn-save">Save</button>
+    <div style="clear: both;"></div>
+  </div>
+
+  <div class="api-keys-container">
+    <h3>CAPTCHA Solving APIs</h3>
+    <div class="captcha-method">
+      <input type="checkbox" id="enableGemini" />
+      <label for="enableGemini">Use Gemini for Image CAPTCHA</label>
+    </div>
+    <input type="password" id="geminiApiKey" placeholder="Gemini API Key">
+    
+    <div class="captcha-method">
+      <input type="checkbox" id="enableGroq" />
+      <label for="enableGroq">Use Groq for Audio CAPTCHA</label>
+    </div>
+    <input type="password" id="groqApiKey" placeholder="Groq API Key">
+    
+    <button id="saveApiKeys" class="btn-save">Save Keys</button>
+    <div style="clear: both;"></div>
+  </div>
+
+  <div class="toggle-container">
+    <label class="switch">
+      <input type="checkbox" id="autoLoginToggle">
+      <span class="slider"></span>
+    </label>
+    <span class="toggle-label">Enable Auto Login</span>
+  </div>
+
+  <div class="status" id="statusMessage">
+    Status: Ready
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

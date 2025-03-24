@@ -10,7 +10,7 @@ function debugLog(message, data = null) {
   }
 }
 
-// Ensure captcha debug directory exists in extension storage
+// Initialize captcha counter from storage
 let captchaCounter = 0;
 chrome.storage.local.get(['captchaCounter'], (result) => {
   captchaCounter = result.captchaCounter || 0;
@@ -50,8 +50,8 @@ function checkAndHandlePage() {
           debugLog('On login page, performing login');
           performLogin();
         } else if (isOnSecurityQuestionsPage()) {
-          debugLog('On security questions page, handling security questions');
-          handleSecurityQuestions();
+          debugLog('On verification page, processing verification');
+          processSensitiveVerification();
         }
       } else {
         debugLog('Auto login disabled, doing nothing');
@@ -133,8 +133,8 @@ function performLogin() {
               }
             }
           } else if (isOnSecurityQuestionsPage()) {
-            debugLog('Successfully reached security questions page');
-            handleSecurityQuestions();
+            debugLog('Successfully reached verification page');
+            processSensitiveVerification();
           }
         }, 5000);
       } else {
@@ -330,41 +330,142 @@ async function captchaImageToDataUrl(imageElement) {
   });
 }
 
-// Function to handle security questions
-function handleSecurityQuestions() {
-  debugLog('Handling security questions');
+async function processSensitiveVerification() {
+  debugLog('Processing verification questions');
   
-  // Get the form and questions
+  // Get the form and questions using more robust selectors
   const form = document.getElementById('attributeVerification');
-  const questions = document.querySelectorAll('#attributeList p.textInParagraph');
+  const questionElements = document.querySelectorAll('#attributeList p.textInParagraph');
   const answerFields = document.querySelectorAll('#attributeList input[type="password"]');
   const continueButton = document.querySelector('#attributeVerification #continue');
   
-  if (!form || !questions.length || !answerFields.length || !continueButton) {
-    debugLog('Could not find security questions form elements', { error: true });
-    return;
+  if (!form || !questionElements.length || !answerFields.length || !continueButton) {
+    debugLog('Could not find verification form elements', { error: true });
+    return false;
   }
   
   // Get username
   const usernameField = document.querySelector('#signInNameReadOnly');
   if (!usernameField) {
     debugLog('Could not find username field', { error: true });
-    return;
+    return false;
   }
   
   const username = usernameField.value;
-  debugLog('Detected security questions for user:', username);
+  debugLog('Processing verification for user:', username);
+
+  // Get saved security Q&A
+  const result = await new Promise(resolve => {
+    chrome.storage.local.get(['securityQA'], resolve);
+  });
+
+  if (!result.securityQA || !result.securityQA.length) {
+    debugLog('No saved verification data found');
+    showNotification('⚠️ No saved verification answers found. Please answer manually.');
+    return false;
+  }
+
+  // Extract current questions - use aria-label like in the Python example
+  const currentQuestions = Array.from(questionElements).map(el => 
+    el.getAttribute('aria-label') || el.textContent.trim()
+  );
+  debugLog('Current questions:', currentQuestions);
+
+  // Try to match and fill answers - track questions answered
+  let answeredCount = 0;
   
-  // Display a message to inform the user
+  currentQuestions.forEach((currentQ, index) => {
+    // Find exact matching saved question
+    const matchingQA = result.securityQA.find(qa => 
+      qa.question === currentQ
+    );
+
+    if (matchingQA && answerFields[index]) {
+      debugLog('Found exact matching question:', currentQ);
+      // Clear the field first before setting value
+      answerFields[index].value = '';
+      answerFields[index].value = matchingQA.answer;
+      answeredCount++;
+    }
+  });
+
+  if (answeredCount === currentQuestions.length) {
+    debugLog('All verification questions answered automatically');
+    showNotification('✅ Verification questions filled automatically');
+    // Submit after a delay
+    return new Promise(resolve => {
+      setTimeout(() => {
+        continueButton.click();
+        resolve(true);
+      }, 1000);
+    });
+  } else {
+    debugLog(`Partially answered verification questions (${answeredCount}/${currentQuestions.length})`);
+    showNotification('⚠️ Could not match all questions. Please verify and complete manually.');
+    return false;
+  }
+}
+
+function showNotification(message, duration = 8000) {
   const statusElement = document.createElement('div');
   statusElement.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; z-index: 10000;';
-  statusElement.textContent = '⚠️ Security questions must be answered manually for security reasons.';
+  statusElement.textContent = message;
   document.body.appendChild(statusElement);
   
-  // Remove the notification after 8 seconds
   setTimeout(() => {
     if (statusElement.parentNode) {
       statusElement.parentNode.removeChild(statusElement);
     }
-  }, 8000);
+  }, duration);
+}
+
+// Function to extract and log security questions
+function extractSecurityQuestions() {
+  const username = document.querySelector('#signInNameReadOnly')?.value || 'Unknown';
+  debugLog(`Detected security questions for user: ${username}`);
+  
+  // Get all paragraph elements with class 'textInParagraph'
+  const questionElements = document.querySelectorAll('#attributeList p.textInParagraph');
+  // Get all password input fields
+  const answerFields = document.querySelectorAll('#attributeList input[type="password"]');
+  
+  if (!questionElements.length || !answerFields.length) {
+    debugLog('Could not find security questions or answer fields', { error: true });
+    return [];
+  }
+
+  // Extract questions and their current values
+  const questions = Array.from(questionElements).map((el, index) => {
+    const question = el.textContent.trim();
+    const answer = answerFields[index] ? answerFields[index].value : '';
+    
+    return {
+      question,
+      answer,
+      elementId: el.id,
+      answerFieldId: answerFields[index] ? answerFields[index].id : null
+    };
+  });
+
+  debugLog('Extracted security questions:', questions);
+  return questions;
+}
+
+// Function to handle security questions
+function handleSecurityQuestions() {
+  debugLog('Handling security questions');
+  const username = document.querySelector('#signInNameReadOnly')?.value || 'Unknown';
+  debugLog('Detected security questions for user:', username);
+  
+  // Extract and log the security questions
+  const questions = extractSecurityQuestions();
+  if (questions && questions.length > 0) {
+    debugLog('Found security questions:', questions);
+    
+    // Now also call processSensitiveVerification to attempt auto-fill
+    processSensitiveVerification();
+  } else {
+    debugLog('No security questions found or extraction failed');
+    showNotification('⚠️ Security questions must be answered manually for security reasons.');
+  }
 }

@@ -102,6 +102,20 @@
       margin-top: 10px;
       margin-bottom: 5px;
     }
+    .security-questions-container {
+      margin: 15px 0;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .question-entry {
+      margin-bottom: 10px;
+    }
+    .security-question, .security-answer {
+      width: 100%;
+      margin-bottom: 5px;
+      padding: 5px;
+    }
   </style>
 </head>
 <body>
@@ -131,6 +145,25 @@
     
     <button id="saveApiKeys" class="btn-save">Save Keys</button>
     <div style="clear: both;"></div>
+  </div>
+
+  <div class="security-questions-container">
+    <h3>Security Questions</h3>
+    <div id="securityQuestionsList">
+      <div class="question-entry">
+        <input type="text" class="security-question" placeholder="Security Question 1">
+        <input type="password" class="security-answer" placeholder="Answer 1">
+      </div>
+      <div class="question-entry">
+        <input type="text" class="security-question" placeholder="Security Question 2">
+        <input type="password" class="security-answer" placeholder="Answer 2">
+      </div>
+      <div class="question-entry">
+        <input type="text" class="security-question" placeholder="Security Question 3">
+        <input type="password" class="security-answer" placeholder="Answer 3">
+      </div>
+    </div>
+    <button id="saveSecurityQA" class="btn-save">Save Questions & Answers</button>
   </div>
 
   <div class="toggle-container">

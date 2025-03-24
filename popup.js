@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const groqApiKey = document.getElementById('groqApiKey');
   const saveApiKeysButton = document.getElementById('saveApiKeys');
 
+  const saveSecurityQAButton = document.getElementById('saveSecurityQA');
+
   // Load saved state
   chrome.storage.local.get(
     [
@@ -97,6 +99,47 @@ document.addEventListener('DOMContentLoaded', function() {
       statusMessage.style.color = 'green';
       
       // Reset to normal status after 2 seconds
+      setTimeout(() => {
+        updateStatusMessage(autoLoginToggle.checked);
+      }, 2000);
+    });
+  });
+
+  // Load saved security questions
+  chrome.storage.local.get(['securityQA'], function(result) {
+    if (result.securityQA) {
+      const questions = document.querySelectorAll('.security-question');
+      const answers = document.querySelectorAll('.security-answer');
+      result.securityQA.forEach((qa, index) => {
+        if (questions[index] && answers[index]) {
+          questions[index].value = qa.question || '';
+          answers[index].value = qa.answer || '';
+        }
+      });
+    }
+  });
+
+  // Save security questions button
+  saveSecurityQAButton.addEventListener('click', function() {
+    const questions = document.querySelectorAll('.security-question');
+    const answers = document.querySelectorAll('.security-answer');
+    
+    const securityQA = Array.from(questions).map((q, index) => ({
+      question: q.value.trim(),
+      answer: answers[index].value.trim()
+    })).filter(qa => qa.question && qa.answer);
+
+    if (securityQA.length === 0) {
+      statusMessage.textContent = 'Status: Please enter at least one question and answer';
+      statusMessage.style.color = 'red';
+      return;
+    }
+
+    // Save to storage
+    chrome.storage.local.set({ securityQA }, function() {
+      statusMessage.textContent = 'Status: Security Q&A saved successfully';
+      statusMessage.style.color = 'green';
+      
       setTimeout(() => {
         updateStatusMessage(autoLoginToggle.checked);
       }, 2000);

@@ -1,0 +1,9 @@
+{
+  "name": "visa-reschedule",
+  "version": "1.0.0",
+  "description": "Chrome extension for visa rescheduling",
+  "main": "background.js",
+  "dependencies": {
+    "@google/generative-ai": "^0.1.3"
+  }
+} 

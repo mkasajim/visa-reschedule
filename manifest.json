@@ -1,39 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "Visa Reschedule Assistant",
+  "name": "Visa Reschedule",
   "version": "1.0",
-  "description": "Automates login to usvisascheduling.com",
+  "description": "Automate visa rescheduling process",
   "permissions": [
-    "activeTab",
     "storage",
+    "activeTab",
     "scripting",
-    "tabs",
     "downloads"
   ],
   "host_permissions": [
-    "https://www.usvisascheduling.com/*",
     "https://atlasauth.b2clogin.com/*",
-    "https://generativelanguage.googleapis.com/*",
-    "https://api.groq.com/*"
+    "http://localhost:3000/*"
   ],
   "background": {
-    "service_worker": "background.js"
-  },
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "images/icon16.png",
-      "48": "images/icon48.png",
-      "128": "images/icon128.png"
-    }
+    "service_worker": "background.js",
+    "type": "module"
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.usvisascheduling.com/*",
-        "https://atlasauth.b2clogin.com/*"
-      ],
-      "js": ["captcha-service.js", "content.js"]
+      "matches": ["https://atlasauth.b2clogin.com/*"],
+      "js": ["content.js"]
     }
-  ]
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
 }

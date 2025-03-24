@@ -184,21 +184,14 @@ async function solveCaptcha() {
     captchaCounter++;
     chrome.storage.local.set({ captchaCounter: captchaCounter });
     
-    // First try audio CAPTCHA if Groq is enabled
-    const audioResult = await tryAudioCaptcha();
-    if (audioResult) {
-      debugLog('Successfully solved audio CAPTCHA:', audioResult);
-      return audioResult;
-    }
-    
-    // If audio failed or not available, try image CAPTCHA with Gemini
+    // Try image CAPTCHA with Gemini
     const imageResult = await tryImageCaptcha();
     if (imageResult) {
       debugLog('Successfully solved image CAPTCHA:', imageResult);
       return imageResult;
     }
     
-    debugLog('All CAPTCHA solving methods failed', { error: true });
+    debugLog('CAPTCHA solving failed', { error: true });
     return null;
   } catch (error) {
     debugLog('Error solving CAPTCHA:', { error: error.toString(), stack: error.stack });
@@ -243,148 +236,6 @@ async function storeInExtensionStorage(key, data) {
   });
 }
 
-// Function to try solving CAPTCHA with audio
-async function tryAudioCaptcha() {
-  try {
-    debugLog('Trying audio CAPTCHA...');
-    
-    // Check if audio CAPTCHA is available
-    const audioCheckbox = document.getElementById('chbLoadAudio');
-    if (!audioCheckbox) {
-      debugLog('Audio CAPTCHA checkbox not found', { error: true });
-      return null;
-    }
-    
-    debugLog('Audio checkbox found, checking state...');
-    
-    // Check if not already checked
-    if (!audioCheckbox.checked) {
-      debugLog('Audio checkbox not checked, clicking it now...');
-      audioCheckbox.click();
-      // Wait for audio to load
-      debugLog('Waiting for audio to load (2 seconds)...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    } else {
-      debugLog('Audio checkbox already checked');
-    }
-    
-    // Get audio source
-    const audioElement = document.getElementById('captchaAudio');
-    if (!audioElement) {
-      debugLog('Audio element not found', { error: true });
-      return null;
-    }
-    
-    debugLog('Audio element found, looking for source...');
-    
-    const audioSource = audioElement.querySelector('source');
-    if (!audioSource || !audioSource.src) {
-      debugLog('Audio source not found', { 
-        audioElementHTML: audioElement.outerHTML 
-      });
-      return null;
-    }
-    
-    const audioUrl = audioSource.src;
-    debugLog('Found audio URL:', audioUrl);
-    
-    // Download the audio file
-    debugLog('Downloading audio blob from URL...');
-    const audioBlob = await fetchAudioBlob(audioUrl);
-    if (!audioBlob) {
-      debugLog('Failed to download audio blob', { error: true });
-      return null;
-    }
-    
-    debugLog('Successfully downloaded audio blob', { 
-      size: audioBlob.size, 
-      type: audioBlob.type 
-    });
-    
-    // Save audio to disk for debugging
-    const audioFilename = `captcha_audio_${captchaCounter}.wav`;
-    
-    // Create audio data URL for saving
-    const audioReader = new FileReader();
-    audioReader.readAsDataURL(audioBlob);
-    
-    const audioDataUrl = await new Promise((resolve) => {
-      audioReader.onloadend = () => resolve(audioReader.result);
-    });
-    
-    // Save audio to downloads folder
-    await saveToDisk(audioDataUrl, audioFilename);
-    
-    // Store audio in extension storage
-    const audioStorageKey = `captcha_audio_${captchaCounter}`;
-    await storeInExtensionStorage(audioStorageKey, audioDataUrl);
-    
-    // Solve with the CAPTCHA service
-    if (window.CaptchaService) {
-      debugLog('Using CaptchaService to solve audio CAPTCHA...');
-      
-      // Get settings to check if Groq is enabled
-      const settings = await new Promise((resolve) => {
-        chrome.storage.local.get(['enableGroq', 'groqApiKey'], resolve);
-      });
-      
-      if (!settings.enableGroq || !settings.groqApiKey) {
-        debugLog('Groq is not enabled or API key is missing', settings);
-        return null;
-      }
-      
-      debugLog('Sending audio to Groq API...');
-      const result = await window.CaptchaService.solveAudioCaptcha(audioBlob);
-      
-      if (result) {
-        debugLog('Groq returned a result:', result);
-        return result;
-      } else {
-        debugLog('Groq failed to solve the audio CAPTCHA', { error: true });
-      }
-    } else {
-      debugLog('CaptchaService not available', { error: true });
-    }
-    
-    return null;
-  } catch (error) {
-    debugLog('Error trying audio CAPTCHA:', { 
-      error: error.toString(), 
-      stack: error.stack 
-    });
-    return null;
-  }
-}
-
-// Function to fetch audio blob
-async function fetchAudioBlob(audioUrl) {
-  try {
-    debugLog(`Fetching audio from URL: ${audioUrl}`);
-    const response = await fetch(audioUrl);
-    
-    if (!response.ok) {
-      debugLog(`Failed to fetch audio: ${response.status}`, { 
-        status: response.status, 
-        statusText: response.statusText 
-      });
-      return null;
-    }
-    
-    const blob = await response.blob();
-    debugLog('Successfully fetched audio blob', { 
-      size: blob.size, 
-      type: blob.type 
-    });
-    return blob;
-  } catch (error) {
-    debugLog('Error fetching audio blob:', { 
-      error: error.toString(), 
-      stack: error.stack 
-    });
-    return null;
-  }
-}
-
 // Function to try solving CAPTCHA with image
 async function tryImageCaptcha() {
   try {
@@ -407,43 +258,39 @@ async function tryImageCaptcha() {
     }
     
     debugLog('Successfully converted CAPTCHA image to data URL');
-    
-    // Save image to disk for debugging
-    const imageFilename = `captcha_image_${captchaCounter}.png`;
-    await saveToDisk(imageDataUrl, imageFilename);
-    
-    // Store image in extension storage
-    const imageStorageKey = `captcha_image_${captchaCounter}`;
-    await storeInExtensionStorage(imageStorageKey, imageDataUrl);
-    
-    // Solve with the CAPTCHA service
-    if (window.CaptchaService) {
-      debugLog('Using CaptchaService to solve image CAPTCHA...');
-      
-      // Get settings to check if Gemini is enabled
-      const settings = await new Promise((resolve) => {
-        chrome.storage.local.get(['enableGemini', 'geminiApiKey'], resolve);
-      });
-      
-      if (!settings.enableGemini || !settings.geminiApiKey) {
-        debugLog('Gemini is not enabled or API key is missing', settings);
-        return null;
-      }
-      
-      debugLog('Sending image to Gemini API...');
-      const result = await window.CaptchaService.solveImageCaptcha(imageDataUrl);
-      
-      if (result) {
-        debugLog('Gemini returned a result:', result);
-        return result;
-      } else {
-        debugLog('Gemini failed to solve the image CAPTCHA', { error: true });
-      }
-    } else {
-      debugLog('CaptchaService not available', { error: true });
+
+    // Get Gemini API key from storage
+    const settings = await new Promise((resolve) => {
+      chrome.storage.local.get(['geminiApiKey'], resolve);
+    });
+
+    if (!settings.geminiApiKey) {
+      debugLog('Gemini API key not found', { error: true });
+      return null;
     }
+
+    // Send request to local server
+    debugLog('Sending request to local server...');
+    const response = await fetch('http://localhost:3000/solve-captcha', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        imageData: imageDataUrl,
+        apiKey: settings.geminiApiKey
+      })
+    });
+
+    const result = await response.json();
     
-    return null;
+    if (result.success) {
+      debugLog('Successfully solved captcha:', result.captchaText);
+      return result.captchaText;
+    } else {
+      debugLog('Failed to solve captcha:', result.error);
+      return null;
+    }
   } catch (error) {
     debugLog('Error trying image CAPTCHA:', { 
       error: error.toString(), 

@@ -114,3 +114,52 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Load saved settings
+  chrome.storage.local.get(['enableGemini', 'geminiApiKey'], (result) => {
+    document.getElementById('enableGemini').checked = result.enableGemini || false;
+    document.getElementById('geminiApiKey').value = result.geminiApiKey || '';
+  });
+
+  // Save settings
+  document.getElementById('saveSettings').addEventListener('click', () => {
+    const enableGemini = document.getElementById('enableGemini').checked;
+    const geminiApiKey = document.getElementById('geminiApiKey').value;
+    
+    // Validate API key if Gemini is enabled
+    if (enableGemini && !geminiApiKey) {
+      showStatus('Please enter a Gemini API key', 'error');
+      return;
+    }
+
+    // Save to storage
+    chrome.storage.local.set({
+      enableGemini,
+      geminiApiKey
+    }, () => {
+      showStatus('Settings saved successfully!', 'success');
+      
+      // Notify content script that settings have changed
+      chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'settingsUpdated'
+          });
+        }
+      });
+    });
+  });
+});
+
+function showStatus(message, type) {
+  const status = document.getElementById('status');
+  status.textContent = message;
+  status.className = `status ${type}`;
+  status.style.display = 'block';
+  
+  // Hide after 3 seconds
+  setTimeout(() => {
+    status.style.display = 'none';
+  }, 3000);
+}

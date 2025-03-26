@@ -63,7 +63,7 @@ app.post('/solve-captcha', async (req, res) => {
                 }
             },
             {
-                text: "Give the text in the image like this:\n[\n  {\n    \"captcha\": \"M8VAO\"\n  }\n]\n\nThe text should not contain any space"
+                text: "Give the text in the image like this:\n[\n  {\n    \"captcha\": captchaText\n  }\n]\n\nThe text should not contain any space"
             }
         ]);
 

@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
   // Get DOM elements
   const autoLoginToggle = document.getElementById('autoLoginToggle');
+  const autoRescheduleToggle = document.getElementById('autoRescheduleToggle');
   const statusMessage = document.getElementById('statusMessage');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
@@ -19,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
   chrome.storage.local.get(
     [
       'autoLoginEnabled', 
+      'autoRescheduleEnabled',
       'username', 
       'password', 
       'enableGemini', 
@@ -27,8 +29,9 @@ document.addEventListener('DOMContentLoaded', function() {
       'groqApiKey'
     ], 
     function(result) {
-      // Set toggle state
+      // Set toggle states
       autoLoginToggle.checked = result.autoLoginEnabled || false;
+      autoRescheduleToggle.checked = result.autoRescheduleEnabled || false;
       
       // Set saved credentials
       usernameInput.value = result.username || '';
@@ -40,22 +43,40 @@ document.addEventListener('DOMContentLoaded', function() {
       enableGroq.checked = result.enableGroq || false;
       groqApiKey.value = result.groqApiKey || '';
       
-      updateStatusMessage(result.autoLoginEnabled);
+      updateStatusMessage(result.autoLoginEnabled, result.autoRescheduleEnabled);
     }
   );
 
-  // Toggle event listener
+  // Toggle event listener for auto login
   autoLoginToggle.addEventListener('change', function() {
-    const isEnabled = autoLoginToggle.checked;
+    const isLoginEnabled = autoLoginToggle.checked;
+    const isRescheduleEnabled = autoRescheduleToggle.checked;
     
     // Save to storage
-    chrome.storage.local.set({ autoLoginEnabled: isEnabled }, function() {
-      updateStatusMessage(isEnabled);
+    chrome.storage.local.set({ autoLoginEnabled: isLoginEnabled }, function() {
+      updateStatusMessage(isLoginEnabled, isRescheduleEnabled);
       
       // Notify background script about the toggle change
       chrome.runtime.sendMessage({ 
         action: 'toggleAutoLogin', 
-        isEnabled: isEnabled 
+        isEnabled: isLoginEnabled 
+      });
+    });
+  });
+
+  // Toggle event listener for auto reschedule
+  autoRescheduleToggle.addEventListener('change', function() {
+    const isLoginEnabled = autoLoginToggle.checked;
+    const isRescheduleEnabled = autoRescheduleToggle.checked;
+    
+    // Save to storage
+    chrome.storage.local.set({ autoRescheduleEnabled: isRescheduleEnabled }, function() {
+      updateStatusMessage(isLoginEnabled, isRescheduleEnabled);
+      
+      // Notify background script about the toggle change
+      chrome.runtime.sendMessage({ 
+        action: 'toggleAutoReschedule', 
+        isEnabled: isRescheduleEnabled 
       });
     });
   });
@@ -81,7 +102,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Reset to normal status after 2 seconds
       setTimeout(() => {
-        updateStatusMessage(autoLoginToggle.checked);
+        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
       }, 2000);
     });
   });
@@ -100,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Reset to normal status after 2 seconds
       setTimeout(() => {
-        updateStatusMessage(autoLoginToggle.checked);
+        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
       }, 2000);
     });
   });
@@ -141,15 +162,21 @@ document.addEventListener('DOMContentLoaded', function() {
       statusMessage.style.color = 'green';
       
       setTimeout(() => {
-        updateStatusMessage(autoLoginToggle.checked);
+        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
       }, 2000);
     });
   });
 
   // Function to update status message
-  function updateStatusMessage(isEnabled) {
-    if (isEnabled) {
+  function updateStatusMessage(isLoginEnabled, isRescheduleEnabled) {
+    if (isLoginEnabled && isRescheduleEnabled) {
+      statusMessage.textContent = 'Status: Auto Login & Reschedule Enabled';
+      statusMessage.style.color = '#2196F3';
+    } else if (isLoginEnabled) {
       statusMessage.textContent = 'Status: Auto Login Enabled';
+      statusMessage.style.color = '#2196F3';
+    } else if (isRescheduleEnabled) {
+      statusMessage.textContent = 'Status: Auto Reschedule Enabled';
       statusMessage.style.color = '#2196F3';
     } else {
       statusMessage.textContent = 'Status: Ready';

@@ -11,6 +11,7 @@
   ],
   "host_permissions": [
     "https://atlasauth.b2clogin.com/*",
+    "https://www.usvisascheduling.com/*",
     "http://localhost:3000/*"
   ],
   "background": {
@@ -19,7 +20,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://atlasauth.b2clogin.com/*"],
+      "matches": [
+        "https://atlasauth.b2clogin.com/*",
+        "https://www.usvisascheduling.com/*"
+      ],
       "js": ["content.js"]
     }
   ],

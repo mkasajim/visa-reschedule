@@ -52,6 +52,9 @@ function checkAndHandlePage() {
         } else if (isOnSecurityQuestionsPage()) {
           debugLog('On verification page, processing verification');
           processSensitiveVerification();
+        } else if (isOnMainDashboardPage()) {
+          debugLog('On main dashboard page, checking for reschedule option');
+          handleMainDashboardPage();
         }
       } else {
         debugLog('Auto login disabled, doing nothing');
@@ -78,6 +81,248 @@ function isOnSecurityQuestionsPage() {
   const answers = document.querySelectorAll('#attributeList input[type="password"]');
   
   return isAtlasLogin && form && questions.length > 0 && answers.length > 0;
+}
+
+// Function to check if we're on the main dashboard page after login
+function isOnMainDashboardPage() {
+  // Check for the main Dashboard elements specifically for usvisascheduling.com
+  const isVisaSchedulingDomain = window.location.hostname.includes('usvisascheduling.com');
+  const sidebarElement = document.getElementById('atlas-sidebar');
+  const appointmentCard = document.getElementById('appointment-card');
+  
+  // More detailed debugging
+  debugLog('Checking for main dashboard page elements:');
+  debugLog('- Is usvisascheduling.com domain: ' + isVisaSchedulingDomain);
+  debugLog('- Sidebar exists: ' + (sidebarElement ? 'Yes' : 'No'));
+  debugLog('- Appointment card exists: ' + (appointmentCard ? 'Yes' : 'No'));
+  
+  // If on usvisascheduling.com domain, we primarily look for sidebar
+  if (isVisaSchedulingDomain && sidebarElement) {
+    debugLog('✅ Detected main dashboard page on usvisascheduling.com');
+    return true;
+  } else if (appointmentCard && sidebarElement) {
+    // Fallback for other domains
+    debugLog('✅ Detected main dashboard page');
+    return true;
+  } else {
+    debugLog('⛔ Not on main dashboard page');
+    return false;
+  }
+}
+
+// Function to handle the main dashboard page
+function handleMainDashboardPage() {
+  debugLog('Handling main dashboard page');
+  
+  // Check for auto-reschedule option
+  chrome.storage.local.get(['autoRescheduleEnabled'], (result) => {
+    debugLog('Auto-reschedule setting: ' + (result.autoRescheduleEnabled ? 'Enabled' : 'Disabled'));
+    
+    if (result.autoRescheduleEnabled) {
+      debugLog('Auto-reschedule is enabled, looking for reschedule link');
+      
+      // On usvisascheduling.com, we know the exact ID and path from the provided HTML
+      const isVisaSchedulingDomain = window.location.hostname.includes('usvisascheduling.com');
+      debugLog('Is usvisascheduling.com domain: ' + isVisaSchedulingDomain);
+      
+      if (isVisaSchedulingDomain) {
+        // Try to find the exact reschedule link as shown in the provided HTML
+        const rescheduleLink = document.querySelector('#atlas-sidebar a#reschedule_appointment');
+        
+        if (rescheduleLink) {
+          debugLog('✅ Found reschedule link by exact ID:', {
+            id: rescheduleLink.id,
+            href: rescheduleLink.href,
+            text: rescheduleLink.textContent
+          });
+          
+          showNotification('🔄 Automatically navigating to reschedule page...');
+          
+          // Click with a small delay to ensure the page is fully loaded
+          setTimeout(() => {
+            debugLog('Clicking reschedule link');
+            try {
+              rescheduleLink.click();
+              debugLog('Clicked reschedule link successfully');
+            } catch (error) {
+              debugLog('Error clicking link, trying direct navigation:', error);
+              if (rescheduleLink.href) {
+                window.location.href = rescheduleLink.href;
+              }
+            }
+          }, 1000);
+          return;
+        } else {
+          // Try alternative selector for usvisascheduling.com
+          debugLog('Could not find link by #reschedule_appointment ID, trying fallback selectors');
+          
+          // Try to find the link that contains "Reschedule Appointment" text
+          const sidebarLinks = document.querySelectorAll('#atlas-sidebar li a');
+          debugLog(`Found ${sidebarLinks.length} links in the sidebar`);
+          
+          // Look for the link with 'Reschedule Appointment' text or href containing 'reschedule=true'
+          let matchingLink = null;
+          for (let i = 0; i < sidebarLinks.length; i++) {
+            const link = sidebarLinks[i];
+            debugLog(`Examining link ${i}:`, {
+              id: link.id,
+              href: link.href,
+              text: link.textContent
+            });
+            
+            if (link.textContent.includes('Reschedule Appointment') || 
+                link.href.includes('reschedule=true')) {
+              matchingLink = link;
+              break;
+            }
+          }
+          
+          if (matchingLink) {
+            debugLog('✅ Found matching reschedule link:', {
+              id: matchingLink.id,
+              href: matchingLink.href,
+              text: matchingLink.textContent
+            });
+            
+            showNotification('🔄 Found reschedule link, clicking now...');
+            setTimeout(() => {
+              try {
+                matchingLink.click();
+              } catch (error) {
+                debugLog('Error clicking link, trying direct navigation:', error);
+                if (matchingLink.href) {
+                  window.location.href = matchingLink.href;
+                }
+              }
+            }, 1000);
+            return;
+          }
+        }
+      }
+      
+      // Fallback to more general selectors
+      debugLog('⛔ Specific selectors failed, trying broader search');
+      
+      // First, try finding by ID (exact match from the HTML)
+      let rescheduleLink = document.querySelector('#reschedule_appointment');
+      
+      // If not found by ID, try finding by the sidebar structure from the user's HTML
+      if (!rescheduleLink) {
+        debugLog('Link not found by ID, trying to find in sidebar structure');
+        
+        // Try to find in the sidebar based on the user's HTML structure
+        const sidebarLinks = document.querySelectorAll('#atlas-sidebar li a');
+        debugLog(`Found ${sidebarLinks.length} links in the sidebar`);
+        
+        // Log all sidebar links for debugging
+        Array.from(sidebarLinks).forEach((link, index) => {
+          debugLog(`Sidebar link ${index}:`, {
+            id: link.id,
+            href: link.href,
+            text: link.textContent
+          });
+        });
+        
+        // Find the one that matches reschedule
+        rescheduleLink = Array.from(sidebarLinks).find(link => {
+          return link.id === 'reschedule_appointment' || 
+                 link.textContent.toLowerCase().includes('reschedule') ||
+                 (link.href && link.href.toLowerCase().includes('reschedule'));
+        });
+        
+        if (rescheduleLink) {
+          debugLog('Found reschedule link in sidebar:', {
+            id: rescheduleLink.id,
+            href: rescheduleLink.href,
+            text: rescheduleLink.textContent
+          });
+        }
+      }
+      
+      // Add more detailed debugging about the link
+      if (rescheduleLink) {
+        debugLog('✅ Found reschedule link:', {
+          id: rescheduleLink.id,
+          href: rescheduleLink.href,
+          text: rescheduleLink.textContent,
+          visible: rescheduleLink.offsetParent !== null
+        });
+        
+        showNotification('🔄 Automatically navigating to reschedule page...');
+        
+        // Click with a small delay to ensure the page is fully loaded
+        setTimeout(() => {
+          debugLog('Attempting to click on reschedule link');
+          try {
+            // Try direct click
+            rescheduleLink.click();
+            debugLog('Clicked reschedule link');
+            
+            // Check if click was successful after a short delay
+            setTimeout(() => {
+              debugLog('Current URL after click attempt: ' + window.location.href);
+            }, 2000);
+          } catch (error) {
+            debugLog('Error clicking reschedule link:', error);
+            
+            // Try alternate methods if direct click fails
+            debugLog('Trying alternate click method');
+            const clickEvent = new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            rescheduleLink.dispatchEvent(clickEvent);
+            
+            // If that fails, try navigating directly
+            setTimeout(() => {
+              if (rescheduleLink.href) {
+                debugLog('Trying direct navigation to: ' + rescheduleLink.href);
+                window.location.href = rescheduleLink.href;
+              }
+            }, 500);
+          }
+        }, 1000);
+      } else {
+        debugLog('⛔ Reschedule link not found by ID or in sidebar, trying broader search');
+        
+        // Try broader selectors - any link with reschedule in text or href
+        const allLinks = document.querySelectorAll('a');
+        debugLog(`Found ${allLinks.length} total links on the page`);
+        
+        let rescheduleLinks = Array.from(allLinks).filter(link => 
+          link.textContent.toLowerCase().includes('reschedule') || 
+          (link.href && link.href.toLowerCase().includes('reschedule'))
+        );
+        
+        if (rescheduleLinks.length > 0) {
+          debugLog('Found alternative reschedule links:', rescheduleLinks.map(l => ({
+            id: l.id, 
+            href: l.href, 
+            text: l.textContent
+          })));
+          
+          // Click the first match
+          showNotification('🔄 Found reschedule link by text, clicking now...');
+          setTimeout(() => {
+            rescheduleLinks[0].click();
+          }, 1000);
+        } else {
+          // Log all links for debugging
+          debugLog('All links on the page for debugging:', Array.from(allLinks).map(l => ({
+            id: l.id,
+            href: l.href || '',
+            text: l.textContent.substring(0, 30) // Truncate text to keep log manageable
+          })));
+          
+          debugLog('⛔ Could not find any reschedule link', { error: true });
+          showNotification('⚠️ Could not find the reschedule link');
+        }
+      }
+    } else {
+      debugLog('Auto-reschedule is disabled, not clicking on reschedule link');
+    }
+  });
 }
 
 // Function to perform login
@@ -468,4 +713,31 @@ function handleSecurityQuestions() {
     debugLog('No security questions found or extraction failed');
     showNotification('⚠️ Security questions must be answered manually for security reasons.');
   }
+}
+
+// Function to check if we're on a visa-related page
+function checkIfVisaPage() {
+  // Check if we're on the usvisascheduling.com domain directly
+  const isVisaSchedulingDomain = window.location.hostname.includes('usvisascheduling.com');
+  
+  if (isVisaSchedulingDomain) {
+    debugLog('✅ Detected usvisascheduling.com domain directly');
+    return true;
+  }
+  
+  // Look for common elements that would indicate we're on a visa scheduling site
+  const possibleVisaPageIndicators = [
+    document.getElementById('atlas-sidebar'),
+    document.querySelector('.usa-sidenav'),
+    document.querySelector('a[href*="reschedule"]'),
+    document.querySelector('a[id*="reschedule"]'),
+    // Check if any h2 contains "Visa" text (can't use :contains in querySelector)
+    Array.from(document.querySelectorAll('h2')).some(el => el.textContent.includes('Visa')),
+    document.getElementById('appointment-card')
+  ];
+  
+  const isVisaPage = possibleVisaPageIndicators.some(el => el !== null && el !== false);
+  debugLog('Visa page detection result: ' + (isVisaPage ? 'Yes' : 'No'));
+  
+  return isVisaPage;
 }

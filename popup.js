@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Get DOM elements
   const autoLoginToggle = document.getElementById('autoLoginToggle');
   const autoRescheduleToggle = document.getElementById('autoRescheduleToggle');
+  const autoSubmitToggle = document.getElementById('autoSubmitToggle');
   const statusMessage = document.getElementById('statusMessage');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
@@ -30,6 +31,7 @@ document.addEventListener('DOMContentLoaded', function() {
     [
       'autoLoginEnabled',
       'autoRescheduleEnabled',
+      'autoSubmitEnabled',
       'username',
       'password',
       'enableGemini',
@@ -43,6 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Set toggle states
       autoLoginToggle.checked = result.autoLoginEnabled || false;
       autoRescheduleToggle.checked = result.autoRescheduleEnabled || false;
+      autoSubmitToggle.checked = result.autoSubmitEnabled || false;
 
       // Set saved credentials
       usernameInput.value = result.username || '';
@@ -111,6 +114,25 @@ document.addEventListener('DOMContentLoaded', function() {
         action: 'toggleAutoReschedule',
         isEnabled: isRescheduleEnabled
       });
+    });
+  });
+
+  // Toggle event listener for auto submit
+  autoSubmitToggle.addEventListener('change', function() {
+    const isSubmitEnabled = autoSubmitToggle.checked;
+
+    // Save to storage
+    chrome.storage.local.set({ autoSubmitEnabled: isSubmitEnabled }, function() {
+      // Update status message
+      if (isSubmitEnabled) {
+        statusMessage.textContent = 'Status: Auto Submit Enabled';
+        statusMessage.style.color = '#2196F3';
+
+        // Reset to normal status after 2 seconds
+        setTimeout(() => {
+          updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+        }, 2000);
+      }
     });
   });
 
@@ -310,6 +332,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
           if (settings.autoLoginEnabled !== undefined) autoLoginToggle.checked = settings.autoLoginEnabled;
           if (settings.autoRescheduleEnabled !== undefined) autoRescheduleToggle.checked = settings.autoRescheduleEnabled;
+          if (settings.autoSubmitEnabled !== undefined) autoSubmitToggle.checked = settings.autoSubmitEnabled;
 
           if (settings.startDate) startDateInput.value = settings.startDate;
           if (settings.endDate) endDateInput.value = settings.endDate;

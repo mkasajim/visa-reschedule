@@ -1171,7 +1171,39 @@ async function findAvailableDates(startDate, endDate) {
                   displayDate = formatDateHumanReadable(dateObj);
                 }
               }
-              const notificationElement = showNotification(`✅ Selected appointment: ${displayDate} at ${timeText}\n\nPlease review and click the Submit button manually.`, 30000);
+              // Check if auto-submit is enabled
+              chrome.storage.local.get(['autoSubmitEnabled'], (result) => {
+                const autoSubmitEnabled = result.autoSubmitEnabled || false;
+
+                // Show different notification based on auto-submit setting
+                let notificationMessage = `✅ Selected appointment: ${displayDate} at ${timeText}`;
+
+                if (autoSubmitEnabled) {
+                  notificationMessage += '\n\nAuto-submit is enabled. Submitting automatically...';
+                } else {
+                  notificationMessage += '\n\nPlease review and click the Submit button manually.';
+                }
+
+                const notificationElement = showNotification(notificationMessage, 30000);
+
+                // If auto-submit is enabled, click the submit button
+                if (autoSubmitEnabled) {
+                  // Wait a moment to allow the UI to update and the submit button to become enabled
+                  setTimeout(() => {
+                    const submitButton = document.getElementById('submitbtn');
+                    if (submitButton && !submitButton.disabled) {
+                      debugLog('Auto-submit is enabled, clicking submit button');
+                      submitButton.click();
+                    } else if (submitButton && submitButton.disabled) {
+                      debugLog('Submit button is disabled, cannot auto-submit', { error: true });
+                      showNotification('⚠️ Cannot auto-submit: Submit button is disabled. Please check and submit manually.', 15000);
+                    } else {
+                      debugLog('Submit button not found, cannot auto-submit', { error: true });
+                      showNotification('⚠️ Cannot auto-submit: Submit button not found. Please submit manually.', 15000);
+                    }
+                  }, 2000); // Wait 2 seconds before attempting to click submit
+                }
+              });
 
               // Add a download button to the notification
               // const downloadButton = document.createElement('button');

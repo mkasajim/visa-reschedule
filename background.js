@@ -15,7 +15,8 @@ chrome.runtime.onInstalled.addListener(() => {
   debugLog('Visa Reschedule Assistant installed');
   // Initialize default settings
   chrome.storage.local.set({
-    autoLoginEnabled: false
+    autoLoginEnabled: false,
+    autoSubmitEnabled: false
   });
 });
 

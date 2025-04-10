@@ -820,9 +820,55 @@ async function processCalendar(startDate, endDate) {
   await findAvailableDates(startDate, endDate);
 }
 
+// Function to check if the calendar has fully loaded and updated
+async function isCalendarFullyLoaded() {
+  return new Promise((resolve) => {
+    // Check if the calendar table exists
+    const calendarTable = document.querySelector('.ui-datepicker-calendar');
+    if (!calendarTable) {
+      debugLog('Calendar table not found during load check');
+      resolve(false);
+      return;
+    }
+
+    // Check if any cells have been populated
+    const allCells = calendarTable.querySelectorAll('td');
+    if (allCells.length === 0) {
+      debugLog('No calendar cells found during load check');
+      resolve(false);
+      return;
+    }
+
+    // Check if any green days are present (if they should be)
+    // This is a more reliable indicator that the calendar has fully loaded with available dates
+    const greenDays = calendarTable.querySelectorAll('td.greenday');
+    const redDays = calendarTable.querySelectorAll('td.redday');
+
+    // If we have either green or red days, the calendar has likely loaded its availability data
+    if (greenDays.length > 0 || redDays.length > 0) {
+      debugLog(`Calendar appears fully loaded with ${greenDays.length} green days and ${redDays.length} red days`);
+      resolve(true);
+      return;
+    }
+
+    // If we have cells but no colored days, the calendar might still be loading
+    // Check if we have any date cells with content
+    const dateCells = calendarTable.querySelectorAll('td:not(.ui-datepicker-other-month)');
+    if (dateCells.length > 0) {
+      debugLog(`Calendar has ${dateCells.length} date cells but no colored days yet`);
+      resolve(false);
+      return;
+    }
+
+    // Default to assuming not fully loaded
+    debugLog('Calendar load state unclear, assuming not fully loaded');
+    resolve(false);
+  });
+}
+
 // Function to navigate to a specific month/year in the datepicker
 async function navigateToDate(targetMonth, targetYear) {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     const monthSelect = document.querySelector('.ui-datepicker-month');
     const yearSelect = document.querySelector('.ui-datepicker-year');
 
@@ -832,6 +878,11 @@ async function navigateToDate(targetMonth, targetYear) {
       return;
     }
 
+    // Log the current state before navigation
+    const currentMonth = parseInt(monthSelect.value, 10);
+    const currentYear = parseInt(yearSelect.value, 10);
+    debugLog('Current calendar state before navigation:', { month: currentMonth + 1, year: currentYear });
+
     // Set month and year values
     monthSelect.value = targetMonth;
     yearSelect.value = targetYear;
@@ -840,11 +891,67 @@ async function navigateToDate(targetMonth, targetYear) {
     monthSelect.dispatchEvent(new Event('change'));
     yearSelect.dispatchEvent(new Event('change'));
 
-    // Wait for datepicker to update
-    setTimeout(() => {
-      debugLog('Navigated to date:', { month: targetMonth + 1, year: targetYear });
-      resolve(true);
-    }, 1000);
+    // Log the calendar state immediately after setting values
+    debugLog('Calendar values set to:', { month: targetMonth + 1, year: targetYear });
+
+    // Wait for datepicker to start updating (initial wait)
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Check if the calendar has updated to the correct month/year
+    const updatedMonth = parseInt(monthSelect.value, 10);
+    const updatedYear = parseInt(yearSelect.value, 10);
+
+    if (updatedMonth !== targetMonth || updatedYear !== targetYear) {
+      debugLog('Calendar did not update to target month/year', {
+        expected: { month: targetMonth + 1, year: targetYear },
+        actual: { month: updatedMonth + 1, year: updatedYear }
+      });
+
+      // Try again with a direct click approach
+      debugLog('Trying alternative navigation approach');
+      monthSelect.value = targetMonth;
+      yearSelect.value = targetYear;
+
+      // Use click instead of change event
+      const changeEvent = new MouseEvent('change', { bubbles: true });
+      monthSelect.dispatchEvent(changeEvent);
+      yearSelect.dispatchEvent(changeEvent);
+
+      // Wait longer for the calendar to update
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // Wait for the calendar to fully load with a timeout
+    let attempts = 0;
+    const maxAttempts = 5;
+    const checkInterval = 500; // Check every 500ms
+
+    const checkCalendarLoaded = async () => {
+      attempts++;
+      const isLoaded = await isCalendarFullyLoaded();
+
+      if (isLoaded) {
+        debugLog(`Calendar fully loaded after ${attempts} attempts`);
+        // Log the calendar state after successful navigation
+        logCalendarState();
+        resolve(true);
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        debugLog(`Calendar did not fully load after ${maxAttempts} attempts, proceeding anyway`);
+        // Log the calendar state even if not fully loaded
+        logCalendarState();
+        resolve(true);
+        return;
+      }
+
+      debugLog(`Calendar not fully loaded yet, attempt ${attempts}/${maxAttempts}`);
+      setTimeout(checkCalendarLoaded, checkInterval);
+    };
+
+    // Start checking if the calendar is fully loaded
+    checkCalendarLoaded();
   });
 }
 
@@ -894,7 +1001,24 @@ async function findAvailableDates(startDate, endDate) {
     await navigateToDate(currentCheckDate.getMonth(), currentCheckDate.getFullYear());
 
     // Look for any available dates in the current month
-    const availableDate = findAvailableDateInCurrentMonth();
+    let availableDate = findAvailableDateInCurrentMonth();
+
+    // If no available date found on first attempt, try again after a short delay
+    // This helps with cases where the calendar hasn't fully loaded yet
+    if (!availableDate) {
+      debugLog('No available dates found on first attempt, waiting and trying again...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Log the calendar state again
+      logCalendarState();
+
+      // Try again
+      availableDate = findAvailableDateInCurrentMonth();
+
+      if (availableDate) {
+        debugLog('Found available date on second attempt!');
+      }
+    }
 
     if (availableDate) {
       const formattedDate = availableDate.toISOString().split('T')[0];
@@ -1160,10 +1284,18 @@ function findAvailableDateInCurrentMonth() {
     console.log('Calendar table HTML:', calendarTable.outerHTML);
   } else {
     console.log('Calendar table not found');
+    return null; // Return null if calendar table not found
   }
 
   // Log all calendar cells for debugging
   logAllCalendarCells();
+
+  // Make sure the calendar has cells before proceeding
+  const allCells = calendarTable.querySelectorAll('td');
+  if (allCells.length === 0) {
+    debugLog('No calendar cells found, calendar may not be fully loaded');
+    return null;
+  }
 
   // First, look specifically for cells with greenday class as this is the most reliable indicator
   const greenDateCells = document.querySelectorAll('.ui-datepicker-calendar td.greenday');
@@ -1417,21 +1549,39 @@ function setupPeriodicCalendarLogging() {
     clearInterval(window._calendarLoggingInterval);
   }
 
+  if (window._calendarInitialLoggingInterval) {
+    clearInterval(window._calendarInitialLoggingInterval);
+  }
+
   // Log immediately
   logCalendarState();
 
-  // Then set up periodic logging every 30 seconds
+  // Set up more frequent logging for the first 10 seconds (initial load period)
+  // This helps catch the transition when the calendar first loads with available dates
+  let initialLogCount = 0;
+  window._calendarInitialLoggingInterval = setInterval(() => {
+    initialLogCount++;
+    logCalendarState('INITIAL_LOAD');
+
+    // Stop the frequent logging after 10 attempts (about 10 seconds)
+    if (initialLogCount >= 10) {
+      clearInterval(window._calendarInitialLoggingInterval);
+      debugLog('Completed initial frequent calendar logging');
+    }
+  }, 1000); // Log every 1 second initially
+
+  // Then set up periodic logging every 30 seconds for ongoing monitoring
   window._calendarLoggingInterval = setInterval(() => {
-    logCalendarState();
+    logCalendarState('PERIODIC');
   }, 30000); // 30 seconds
 
-  console.log('Set up periodic calendar logging every 30 seconds');
+  console.log('Set up periodic calendar logging: every 1 second for first 10 seconds, then every 30 seconds');
 }
 
 // Function to log the current state of the calendar
-function logCalendarState() {
+function logCalendarState(logType = 'STANDARD') {
   const timestamp = new Date().toISOString();
-  console.log(`\n=== CALENDAR STATE LOG [${timestamp}] ===`);
+  console.log(`\n=== CALENDAR STATE LOG [${timestamp}] [${logType}] ===`);
 
   // Log current month/year
   const monthElement = document.querySelector('.ui-datepicker-month');
@@ -1471,7 +1621,7 @@ function logCalendarState() {
   // Log all calendar cells
   logAllCalendarCells();
 
-  console.log(`=== END CALENDAR STATE LOG [${timestamp}] ===\n`);
+  console.log(`=== END CALENDAR STATE LOG [${timestamp}] [${logType}] ===\n`);
 }
 
 // Function to log all calendar cells for detailed debugging

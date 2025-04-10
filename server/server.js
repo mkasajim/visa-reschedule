@@ -10,6 +10,45 @@ app.use(express.json({ limit: '10mb' }));
 
 const PORT = 3000;
 const TEMP_DIR = path.join(__dirname, 'temp');
+const MAX_RETRIES = 3; // Maximum number of retries for captcha solving
+
+/**
+ * Refines captcha text to ensure it only contains uppercase letters and numbers
+ * @param {string} text - The raw captcha text to refine
+ * @returns {string} - The refined captcha text
+ */
+function refineCaptchaText(text) {
+    if (!text) return '';
+
+    // Step 1: Keep only alphanumeric characters (letters and numbers)
+    // This preserves both uppercase and lowercase letters
+    let refined = text.replace(/[^a-zA-Z0-9]/g, '');
+
+    // Step 2: Convert all letters to uppercase
+    // This converts any lowercase letters to uppercase rather than removing them
+    refined = refined.toUpperCase();
+
+    console.log('Refining captcha text:', { original: text, afterFiltering: refined });
+
+    return refined;
+}
+
+/**
+ * Validates if the captcha text meets our requirements
+ * @param {string} text - The captcha text to validate
+ * @returns {boolean} - Whether the text is valid
+ */
+function isValidCaptchaText(text) {
+    if (!text) return false;
+
+    // Check if text contains only uppercase letters and numbers
+    // Note: At this point, all lowercase letters should have been converted to uppercase
+    const isValid = /^[A-Z0-9]{4,8}$/.test(text);
+
+    console.log('Validating captcha text:', { text, isValid, length: text.length });
+
+    return isValid;
+}
 
 // Ensure temp directory exists
 async function ensureTempDir() {
@@ -24,28 +63,26 @@ async function ensureTempDir() {
 async function saveBase64Image(base64Data) {
     const fileName = `captcha_${Date.now()}.png`;
     const filePath = path.join(TEMP_DIR, fileName);
-    
+
     // Remove data:image/png;base64, prefix if present
     const base64Image = base64Data.replace(/^data:image\/\w+;base64,/, '');
-    
+
     await fs.writeFile(filePath, base64Image, 'base64');
     return filePath;
 }
 
-app.post('/solve-captcha', async (req, res) => {
+/**
+ * Solve captcha with retry mechanism
+ * @param {string} imageData - Base64 image data
+ * @param {string} apiKey - Gemini API key
+ * @param {number} retryCount - Current retry count
+ * @returns {Promise<{success: boolean, captchaText?: string, error?: string}>} - Result object
+ */
+async function solveCaptchaWithRetry(imageData, apiKey, retryCount = 0) {
     try {
-        const { imageData, apiKey } = req.body;
-        
-        if (!imageData || !apiKey) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Missing image data or API key' 
-            });
-        }
-
         // Save image to temp file
         const imagePath = await saveBase64Image(imageData);
-        console.log('Saved image to:', imagePath);
+        console.log(`Attempt #${retryCount + 1} - Saved image to:`, imagePath);
 
         // Initialize Gemini
         const genAI = new GoogleGenerativeAI(apiKey);
@@ -63,7 +100,7 @@ app.post('/solve-captcha', async (req, res) => {
                 }
             },
             {
-                text: "Give the text in the image like this:\n[\n  {\n    \"captcha\": captchaText\n  }\n]\n\nThe text should not contain any space"
+                text: "You are a CAPTCHA solving assistant. Your task is to identify the text in the image.\n\nRules:\n1. The response MUST be in valid JSON format.\n2. The text should not contain any spaces.\n3. Include only LETTERS and NUMBERS (no special characters).\n4. Return ONLY the JSON object, nothing else.\n\nGive the text in the image like this:\n{\n  \"captcha\": \"ABCD123\"\n}\n\nNote: If you see lowercase letters, you can include them. They will be automatically converted to uppercase."
             }
         ]);
 
@@ -71,27 +108,157 @@ app.post('/solve-captcha', async (req, res) => {
         await fs.unlink(imagePath);
 
         const response = result.response;
-        console.log('Gemini response:', response.text());
+        const responseText = response.text();
+        console.log(`Attempt #${retryCount + 1} - Gemini response:`, responseText);
 
         // Extract captcha text
-        const captchaMatch = response.text().match(/"captcha":\s*"([^"]+)"/);
+        // First try to parse as JSON
+        try {
+            // Look for JSON-like structure in the text
+            const jsonMatch = responseText.match(/\{.*\}/s);
+            if (jsonMatch) {
+                const jsonText = jsonMatch[0];
+                console.log(`Attempt #${retryCount + 1} - Found JSON structure:`, jsonText);
+
+                try {
+                    const jsonData = JSON.parse(jsonText);
+                    if (jsonData.captcha) {
+                        const refinedCaptcha = refineCaptchaText(jsonData.captcha);
+                        console.log(`Attempt #${retryCount + 1} - Successfully parsed JSON with captcha:`, jsonData.captcha);
+                        console.log(`Attempt #${retryCount + 1} - Refined captcha text:`, refinedCaptcha);
+
+                        if (isValidCaptchaText(refinedCaptcha)) {
+                            return {
+                                success: true,
+                                captchaText: refinedCaptcha
+                            };
+                        } else {
+                            console.log(`Attempt #${retryCount + 1} - Refined captcha text is invalid:`, refinedCaptcha);
+                        }
+                    }
+                } catch (jsonError) {
+                    console.log(`Attempt #${retryCount + 1} - Error parsing JSON:`, jsonError.message);
+                }
+            }
+        } catch (error) {
+            console.log(`Attempt #${retryCount + 1} - Error in JSON extraction:`, error.message);
+        }
+
+        // Fallback to regex pattern
+        const captchaMatch = responseText.match(/"captcha":\s*"([^"]+)"/);
         if (captchaMatch) {
-            return res.json({ 
-                success: true, 
-                captchaText: captchaMatch[1] 
+            const refinedCaptcha = refineCaptchaText(captchaMatch[1]);
+            console.log(`Attempt #${retryCount + 1} - Extracted captcha via regex:`, captchaMatch[1]);
+            console.log(`Attempt #${retryCount + 1} - Refined captcha text:`, refinedCaptcha);
+
+            if (isValidCaptchaText(refinedCaptcha)) {
+                return {
+                    success: true,
+                    captchaText: refinedCaptcha
+                };
+            } else {
+                console.log(`Attempt #${retryCount + 1} - Refined captcha text is invalid:`, refinedCaptcha);
+            }
+        }
+
+        // Try to extract alphanumeric text as fallback
+        console.log(`Attempt #${retryCount + 1} - No JSON structure found, trying to extract alphanumeric text`);
+        // Keep all letters (both uppercase and lowercase) and numbers
+        let alphanumeric = responseText.replace(/[^a-zA-Z0-9]/g, '');
+        if (alphanumeric && alphanumeric.length > 0 && alphanumeric.length <= 8) {
+            const refinedCaptcha = refineCaptchaText(alphanumeric);
+            console.log(`Attempt #${retryCount + 1} - Extracted alphanumeric text:`, alphanumeric);
+            console.log(`Attempt #${retryCount + 1} - Refined captcha text:`, refinedCaptcha);
+
+            if (isValidCaptchaText(refinedCaptcha)) {
+                return {
+                    success: true,
+                    captchaText: refinedCaptcha
+                };
+            } else {
+                console.log(`Attempt #${retryCount + 1} - Refined captcha text is invalid:`, refinedCaptcha);
+            }
+        }
+
+        // Check if we should retry
+        if (retryCount < MAX_RETRIES - 1) {
+            console.log(`Non-JSON response received. Retrying (${retryCount + 1}/${MAX_RETRIES}) after delay...`);
+            // Add a delay before retrying (1 second * retry count)
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+            return await solveCaptchaWithRetry(imageData, apiKey, retryCount + 1);
+        }
+
+        return {
+            success: false,
+            error: 'Could not extract captcha text from response after multiple attempts'
+        };
+    } catch (error) {
+        console.error(`Attempt #${retryCount + 1} - Error solving captcha:`, error);
+
+        // Check if we should retry
+        if (retryCount < MAX_RETRIES - 1) {
+            console.log(`Error occurred. Retrying (${retryCount + 1}/${MAX_RETRIES}) after delay...`);
+            // Add a delay before retrying (1 second * retry count)
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+            return await solveCaptchaWithRetry(imageData, apiKey, retryCount + 1);
+        }
+
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+app.post('/solve-captcha', async (req, res) => {
+    try {
+        const { imageData, apiKey } = req.body;
+
+        if (!imageData || !apiKey) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing image data or API key'
             });
         }
 
-        return res.json({ 
-            success: false, 
-            error: 'Could not extract captcha text from response' 
-        });
+        // Use the retry mechanism to solve the captcha
+        const result = await solveCaptchaWithRetry(imageData, apiKey);
+        return res.json(result);
 
     } catch (error) {
-        console.error('Error solving captcha:', error);
-        return res.status(500).json({ 
-            success: false, 
-            error: error.message 
+        console.error('Unexpected error in solve-captcha endpoint:', error);
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Endpoint to save captcha image for debugging
+app.post('/save-captcha', async (req, res) => {
+    try {
+        const { imageData } = req.body;
+
+        if (!imageData) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing image data'
+            });
+        }
+
+        // Save image to temp file
+        const imagePath = await saveBase64Image(imageData);
+        console.log('Saved captcha image for debugging:', imagePath);
+
+        return res.json({
+            success: true,
+            filePath: imagePath
+        });
+    } catch (error) {
+        console.error('Error saving captcha image:', error);
+        return res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });

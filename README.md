@@ -1,15 +1,18 @@
 # Visa Reschedule Assistant
 
-A Chrome extension to automate login to usvisascheduling.com.
+A Chrome extension to automate login to usvisascheduling.com and find available appointment dates.
 
 ## Features
 
 - Automated login with saved credentials
 - Handles redirection to atlasauth.b2clogin.com for authentication
 - Auto-detection of login page and security questions
-- Simple toggle switch to enable/disable automation
+- Automatic reschedule date finding within a specified date range
+- Intelligent detection of reschedule links even when delayed loading
+- Simple toggle switches to enable/disable automation features
 - Optional CAPTCHA solving with Gemini (for image) and Groq (for audio)
 - Debug logging with CAPTCHA image/audio saving
+- Desktop notifications when available dates are found
 
 ## Installation
 
@@ -24,11 +27,40 @@ A Chrome extension to automate login to usvisascheduling.com.
 1. Click on the extension icon in your Chrome toolbar to open the popup
 2. Enter your usvisascheduling.com username and password, then click "Save"
 3. (Optional) Enter your Gemini and/or Groq API keys to enable automatic CAPTCHA solving
-4. Toggle the "Enable Auto Login" switch to on
-5. The extension will open the visa scheduling site (if not already open) and attempt to log in
-6. When redirected to atlasauth.b2clogin.com, the extension will automatically fill in your credentials
-7. If you've configured the API keys, the extension will attempt to solve CAPTCHAs automatically
-8. Security questions must still be answered manually for security reasons
+4. Set your desired appointment date range using the "From" and "To" month selectors
+5. Toggle the "Enable Auto Login" switch to enable automatic login
+6. Toggle the "Enable Auto Reschedule" switch to enable automatic date finding
+7. The extension will:
+   - Open the visa scheduling site (if not already open)
+   - Automatically log in (if enabled)
+   - Navigate to the reschedule page (even if the link appears after a delay)
+   - Search for available dates within your specified range
+   - Automatically select the earliest available date if found
+
+## Main Dashboard Detection
+
+The extension has been improved to reliably detect the main dashboard page even when elements load with delays:
+
+1. It can detect the dashboard page by the presence of the "Notes and Instructions" header
+2. It continuously monitors for DOM changes to find the reschedule link when it appears
+3. A notification will be displayed while waiting for the reschedule link to appear
+4. After finding the link, it will automatically navigate to the reschedule page
+
+This ensures the extension works even when page elements load asynchronously or are delayed.
+
+## Date Range Selection
+
+The extension includes a date range selector that allows you to:
+
+1. Specify the earliest month you'd accept for an appointment
+2. Specify the latest month you'd accept for an appointment
+3. The extension will automatically navigate through months in the calendar and look for any available dates
+4. When an available date is found, it will:
+   - Display a notification
+   - Automatically select that date
+   - Show a confirmation message on the page
+
+If no dates are available in your selected range, you'll receive a notification.
 
 ## CAPTCHA Solving
 

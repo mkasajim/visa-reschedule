@@ -7,7 +7,8 @@
     "storage",
     "activeTab",
     "scripting",
-    "downloads"
+    "downloads",
+    "notifications"
   ],
   "host_permissions": [
     "https://atlasauth.b2clogin.com/*",

@@ -116,11 +116,28 @@
       margin-bottom: 5px;
       padding: 5px;
     }
+    .date-range-container {
+      margin-top: 15px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .date-input-group {
+      margin-bottom: 10px;
+    }
+    .date-input-group label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    .date-input-group input {
+      width: 100%;
+      padding: 5px;
+    }
   </style>
 </head>
 <body>
   <h2>Visa Reschedule Assistant</h2>
-  
+
   <div class="credentials-container">
     <h3>Login Credentials</h3>
     <input type="text" id="username" placeholder="Username">
@@ -136,13 +153,13 @@
       <label for="enableGemini">Use Gemini for Image CAPTCHA</label>
     </div>
     <input type="password" id="geminiApiKey" placeholder="Gemini API Key">
-    
+
     <div class="captcha-method">
       <input type="checkbox" id="enableGroq" />
       <label for="enableGroq">Use Groq for Audio CAPTCHA</label>
     </div>
     <input type="password" id="groqApiKey" placeholder="Groq API Key">
-    
+
     <button id="saveApiKeys" class="btn-save">Save Keys</button>
     <div style="clear: both;"></div>
   </div>
@@ -180,6 +197,35 @@
       <span class="slider"></span>
     </label>
     <span class="toggle-label">Enable Auto Reschedule</span>
+  </div>
+
+  <div class="date-range-container">
+    <h3>Desired Appointment Date Range</h3>
+    <div class="date-input-group">
+      <label for="startDate">From:</label>
+      <input type="month" id="startDate" min="2024-01" required>
+    </div>
+    <div class="date-input-group">
+      <label for="endDate">To:</label>
+      <input type="month" id="endDate" min="2024-01" required>
+    </div>
+    <button id="saveDateRange" class="btn-save">Save Range</button>
+    <div style="clear: both;"></div>
+  </div>
+
+  <div class="export-import-container" style="margin-top: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
+    <h3>Export/Import Settings</h3>
+    <div style="display: flex; justify-content: space-between;">
+      <button id="exportSettings" style="background-color: #2196F3; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer;">
+        Export Settings
+      </button>
+      <div style="position: relative; overflow: hidden;">
+        <button id="importSettingsBtn" style="background-color: #ff9800; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer;">
+          Import Settings
+        </button>
+        <input type="file" id="importSettings" accept=".json" style="position: absolute; top: 0; left: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;">
+      </div>
+    </div>
   </div>
 
   <div class="status" id="statusMessage">

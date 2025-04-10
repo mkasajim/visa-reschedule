@@ -23,6 +23,8 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'toggleAutoLogin') {
     handleAutoLoginToggle(message.isEnabled);
+  } else if (message.action === 'toggleAutoReschedule') {
+    handleAutoRescheduleToggle(message.isEnabled);
   }
 });
 
@@ -32,11 +34,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     const isVisaSite = tab.url.includes('usvisascheduling.com');
     const isAtlasLogin = tab.url.includes('atlasauth.b2clogin.com');
-    
+
     if (isVisaSite || isAtlasLogin) {
-      // Check if auto login is enabled
-      chrome.storage.local.get(['autoLoginEnabled'], (result) => {
-        if (result.autoLoginEnabled) {
+      // Check if auto login or auto reschedule is enabled
+      chrome.storage.local.get(['autoLoginEnabled', 'autoRescheduleEnabled'], (result) => {
+        if (result.autoLoginEnabled || result.autoRescheduleEnabled) {
           // Inject the content script if not already injected
           chrome.scripting.executeScript({
             target: { tabId: tabId },
@@ -47,9 +49,25 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
               console.error('Script injection failed:', err);
             }
           });
-          
-          // Send message to start login process
-          chrome.tabs.sendMessage(tabId, { action: 'performLogin' });
+
+          // Only send login message if auto login is enabled
+          if (result.autoLoginEnabled && (isAtlasLogin || (isVisaSite && tab.url.includes('login')))) {
+            chrome.tabs.sendMessage(tabId, { action: 'performLogin' });
+          }
+
+          // Check for reschedule page if auto reschedule is enabled
+          if (result.autoRescheduleEnabled && isVisaSite) {
+            // Wait a bit longer for content script to initialize and page to fully load
+            // This helps with cases where the reschedule link appears after a delay
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tabId, { action: 'checkForReschedulePage' });
+            }, 3000);
+
+            // Add a second check after a longer delay to catch very delayed page loads
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tabId, { action: 'checkForReschedulePage' });
+            }, 8000);
+          }
         }
       });
     }
@@ -60,11 +78,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 function handleAutoLoginToggle(isEnabled) {
   if (isEnabled) {
     // Check if there's already a tab with either the visa scheduling site or atlas login
-    chrome.tabs.query({ 
+    chrome.tabs.query({
       url: [
-        '*://www.usvisascheduling.com/*', 
+        '*://www.usvisascheduling.com/*',
         '*://atlasauth.b2clogin.com/*'
-      ] 
+      ]
     }, (tabs) => {
       if (tabs.length > 0) {
         // Site is already open, send message to the tab
@@ -76,6 +94,42 @@ function handleAutoLoginToggle(isEnabled) {
           debugLog('Created new tab for visa scheduling site');
         });
       }
+    });
+  }
+}
+
+// Function to handle auto reschedule toggle
+function handleAutoRescheduleToggle(isEnabled) {
+  if (isEnabled) {
+    // Update settings
+    chrome.storage.local.set({ autoRescheduleEnabled: true }, () => {
+      debugLog('Auto reschedule enabled');
+
+      // Check if there's already a tab with the visa scheduling site
+      chrome.tabs.query({
+        url: ['*://www.usvisascheduling.com/*']
+      }, (tabs) => {
+        if (tabs.length > 0) {
+          // Site is already open, send message to the tab to check reschedule page
+          chrome.tabs.sendMessage(tabs[0].id, { action: 'checkForReschedulePage' });
+
+          // Send another check after a delay to handle delayed page loading
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabs[0].id, { action: 'checkForReschedulePage' });
+          }, 5000);
+        } else {
+          // Open a new tab with the site if not already open
+          chrome.tabs.create({ url: 'https://www.usvisascheduling.com/en-US/' }, (tab) => {
+            // Tab creation callback - the content script will be auto-injected via the onUpdated listener
+            debugLog('Created new tab for visa scheduling site');
+          });
+        }
+      });
+    });
+  } else {
+    // Update settings
+    chrome.storage.local.set({ autoRescheduleEnabled: false }, () => {
+      debugLog('Auto reschedule disabled');
     });
   }
 }
@@ -122,7 +176,7 @@ async function solveCaptchaWithGemini(imageDataUrl, apiKey) {
   try {
     // Upload the image
     const fileUri = await uploadToGemini(imageDataUrl, apiKey);
-    
+
     // Generate content
     const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
     const generateResponse = await fetch(generateUrl, {
@@ -163,15 +217,15 @@ async function solveCaptchaWithGemini(imageDataUrl, apiKey) {
 
     const generateResult = await generateResponse.json();
     debugLog('Received response from Gemini:', generateResult);
-    
+
     const responseText = generateResult.candidates[0].content.parts[0].text;
     const captchaMatch = responseText.match(/"captcha":\s*"([^"]+)"/);
-    
+
     if (captchaMatch) {
       debugLog('Successfully extracted captcha text:', captchaMatch[1]);
       return captchaMatch[1];
     }
-    
+
     debugLog('Failed to extract captcha text from response');
     return null;
   } catch (error) {
@@ -183,11 +237,11 @@ async function solveCaptchaWithGemini(imageDataUrl, apiKey) {
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'solveCaptcha') {
-    debugLog('Received solveCaptcha message:', { 
+    debugLog('Received solveCaptcha message:', {
       apiKey: message.apiKey ? message.apiKey.substring(0, 10) + '...' : 'missing',
       imageDataUrl: message.imageDataUrl ? 'present' : 'missing'
     });
-    
+
     if (!message.apiKey || !message.imageDataUrl) {
       debugLog('Missing required data for captcha solving');
       sendResponse({ success: false, error: 'Missing required data' });
@@ -204,7 +258,70 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         debugLog('Captcha solving failed:', { success: false, error: error.message });
         sendResponse({ success: false, error: error.message });
       });
-    
+
     return true; // Will respond asynchronously
+  } else if (message.action === 'foundAvailableDate') {
+    // Log when an available date is found
+    debugLog('Available date found:', message.date);
+
+    // Show a notification to the user
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon128.png',
+      title: 'Visa Appointment Available!',
+      message: `An available appointment date was found: ${message.date}`,
+      priority: 2
+    });
+
+    return true;
+  } else if (message.action === 'noAvailableDates') {
+    // Log when no available dates are found
+    debugLog('No available dates found in date range:', message.range);
+
+    // Show a notification to the user
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon128.png',
+      title: 'No Visa Appointments Available',
+      message: `No available appointments found between ${message.range.start} and ${message.range.end}`,
+      priority: 1
+    });
+
+    return true;
+  } else if (message.action === 'saveDebugContent') {
+    // Handle saving debug content
+    debugLog('Received debug content for saving:', {
+      filename: message.filename,
+      dateFound: message.dateFound,
+      contentLength: message.content ? message.content.length : 0
+    });
+
+    try {
+      // Create a blob with the HTML content
+      const blob = new Blob([message.content], { type: 'text/html' });
+
+      // Create a download URL
+      const url = URL.createObjectURL(blob);
+
+      // Create a download item
+      chrome.downloads.download({
+        url: url,
+        filename: message.filename,
+        saveAs: false
+      }, (downloadId) => {
+        if (chrome.runtime.lastError) {
+          debugLog('Error saving debug content:', chrome.runtime.lastError);
+        } else {
+          debugLog('Debug content saved successfully with download ID:', downloadId);
+        }
+
+        // Clean up the URL object
+        URL.revokeObjectURL(url);
+      });
+    } catch (error) {
+      debugLog('Error processing debug content:', error);
+    }
+
+    return true;
   }
 });

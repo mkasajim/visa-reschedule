@@ -1244,6 +1244,9 @@ async function findAvailableDates(startDate, endDate) {
     }
 
     showNotification('⚠️ No available appointment dates found in the calendar', 15000);
+
+    // Click on the "Visa Application Home" link when no dates are found
+    clickVisaApplicationHomeLink(false);
   } else if (!foundDateInRange) {
     debugLog('Found available dates, but none within the preferred range');
 
@@ -1265,6 +1268,9 @@ async function findAvailableDates(startDate, endDate) {
         end: endDate.toISOString().split('T')[0]
       }
     });
+
+    // Also click on the "Visa Application Home" link when dates are outside preferred range
+    clickVisaApplicationHomeLink(true);
   }
 }
 
@@ -1540,6 +1546,50 @@ function clickNextMonth() {
     return true;
   }
   return false;
+}
+
+// Function to click on the "Visa Application Home" link when no available dates are found
+function clickVisaApplicationHomeLink(datesOutsideRange = false) {
+  debugLog('Attempting to click on Visa Application Home link');
+
+  // Find the link using the selector from the HTML structure
+  const homeLink = document.querySelector('li.link a[title="Visa Application Home"]');
+
+  if (homeLink) {
+    debugLog('Found Visa Application Home link, clicking it');
+
+    // Show different messages depending on whether dates were found outside range or no dates at all
+    if (datesOutsideRange) {
+      showNotification('🔄 Dates found outside preferred range. Returning to Visa Application Home...', 8000);
+    } else {
+      showNotification('🔄 No available dates found. Returning to Visa Application Home...', 8000);
+    }
+
+    // Add a small delay before clicking to ensure notification is visible
+    setTimeout(() => {
+      try {
+        homeLink.click();
+        debugLog('Successfully clicked on Visa Application Home link');
+      } catch (error) {
+        debugLog('Error clicking on Visa Application Home link:', { error: error.toString() });
+        // Try direct navigation as fallback
+        if (homeLink.href) {
+          window.location.href = homeLink.href;
+          debugLog('Navigating directly to Visa Application Home URL');
+        } else {
+          // Last resort - navigate to root
+          window.location.href = '/';
+          debugLog('Navigating to root URL as fallback');
+        }
+      }
+    }, 1500);
+
+    return true;
+  } else {
+    debugLog('Could not find Visa Application Home link');
+    showNotification('⚠️ Could not find Home link to navigate back', 8000);
+    return false;
+  }
 }
 
 // Set up periodic logging of calendar state for debugging

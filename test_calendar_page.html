@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Calendar Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .breadcrumb {
+      list-style: none;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+    }
+    .breadcrumb li {
+      display: inline;
+      margin-right: 10px;
+    }
+    .link a {
+      color: blue;
+      text-decoration: none;
+    }
+    .link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <ul class="breadcrumb" role="navigation" aria-label="breadcrumb">
+    <li class="link">
+      <a href="/" title="Visa Application Home">Visa Application Home</a>
+    </li>
+    <li>
+      <a href="#" class="activebreadcrumb" aria-current="page" title="Applicant Schedule Appointment">Applicant Schedule Appointment</a>
+    </li>
+  </ul>
+
+  <div id="main_container">
+    <h2>Calendar</h2>
+    <div id="datepicker" class="hasDatepicker">
+      <!-- Simulated calendar with no available dates -->
+      <div class="ui-datepicker-inline ui-datepicker ui-widget ui-widget-content ui-helper-clearfix ui-corner-all">
+        <div class="ui-datepicker-header">
+          <a class="ui-datepicker-prev ui-corner-all" title="Prev"><span class="ui-icon ui-icon-circle-triangle-w">Prev</span></a>
+          <a class="ui-datepicker-next ui-corner-all" title="Next"><span class="ui-icon ui-icon-circle-triangle-e">Next</span></a>
+          <div class="ui-datepicker-title">
+            <select class="ui-datepicker-month">
+              <option value="0">Jan</option>
+              <option value="1">Feb</option>
+              <option value="2">Mar</option>
+              <option value="3">Apr</option>
+              <option value="4">May</option>
+              <option value="5">Jun</option>
+              <option value="6">Jul</option>
+              <option value="7">Aug</option>
+              <option value="8" selected>Sep</option>
+              <option value="9">Oct</option>
+              <option value="10">Nov</option>
+              <option value="11">Dec</option>
+            </select>
+            <select class="ui-datepicker-year">
+              <option value="2024">2024</option>
+              <option value="2025" selected>2025</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
+        </div>
+        <table class="ui-datepicker-calendar">
+          <thead>
+            <tr>
+              <th scope="col">Su</th>
+              <th scope="col">Mo</th>
+              <th scope="col">Tu</th>
+              <th scope="col">We</th>
+              <th scope="col">Th</th>
+              <th scope="col">Fr</th>
+              <th scope="col">Sa</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- All dates are red (unavailable) -->
+            <tr>
+              <td class="ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled">&nbsp;</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">1</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">2</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">3</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">4</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">5</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">6</td>
+            </tr>
+            <tr>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">7</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">8</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">9</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">10</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">11</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">12</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">13</td>
+            </tr>
+            <tr>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">14</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">15</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">16</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">17</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">18</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">19</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">20</td>
+            </tr>
+            <tr>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">21</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">22</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">23</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">24</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">25</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">26</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">27</td>
+            </tr>
+            <tr>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">28</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">29</td>
+              <td class="redday ui-datepicker-unselectable ui-state-disabled">30</td>
+              <td class="ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled">&nbsp;</td>
+              <td class="ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled">&nbsp;</td>
+              <td class="ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled">&nbsp;</td>
+              <td class="ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled">&nbsp;</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p id="datepicker-message">No Slots Available</p>
+  </div>
+
+  <script>
+    // Simulate clicking the home link for testing
+    function testHomeLink() {
+      const homeLink = document.querySelector('li.link a[title="Visa Application Home"]');
+      if (homeLink) {
+        console.log('Home link found:', homeLink);
+        homeLink.addEventListener('click', function(e) {
+          e.preventDefault(); // Prevent actual navigation
+          console.log('Home link clicked!');
+          alert('Home link clicked! Would navigate to: ' + this.href);
+        });
+      } else {
+        console.log('Home link not found');
+      }
+    }
+
+    // Simulate the clickVisaApplicationHomeLink function
+    function clickVisaApplicationHomeLink(datesOutsideRange = false) {
+      console.log('Attempting to click on Visa Application Home link');
+
+      const homeLink = document.querySelector('li.link a[title="Visa Application Home"]');
+
+      if (homeLink) {
+        console.log('Found Visa Application Home link, clicking it');
+
+        // Show different messages depending on whether dates were found outside range or no dates at all
+        if (datesOutsideRange) {
+          console.log('🔄 Dates found outside preferred range. Returning to Visa Application Home...');
+        } else {
+          console.log('🔄 No available dates found. Returning to Visa Application Home...');
+        }
+
+        setTimeout(() => {
+          try {
+            // Simulate click
+            console.log('Clicking home link...');
+            homeLink.click();
+          } catch (error) {
+            console.error('Error clicking:', error);
+          }
+        }, 1500);
+
+        return true;
+      } else {
+        console.log('Could not find Visa Application Home link');
+        return false;
+      }
+    }
+
+    // Run test on page load
+    window.addEventListener('load', function() {
+      testHomeLink();
+
+      // Add test buttons
+      const testContainer = document.createElement('div');
+      testContainer.style.margin = '20px';
+      testContainer.style.padding = '10px';
+      testContainer.style.border = '1px solid #ccc';
+      testContainer.innerHTML = `
+        <h3>Test Functions</h3>
+        <button id="testNoDateBtn">Test No Dates Found</button>
+        <button id="testOutsideRangeBtn">Test Dates Outside Range</button>
+      `;
+      document.body.appendChild(testContainer);
+
+      // Add event listeners to test buttons
+      document.getElementById('testNoDateBtn').addEventListener('click', function() {
+        clickVisaApplicationHomeLink(false);
+      });
+
+      document.getElementById('testOutsideRangeBtn').addEventListener('click', function() {
+        clickVisaApplicationHomeLink(true);
+      });
+    });
+  </script>
+</body>
+</html>

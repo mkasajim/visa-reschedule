@@ -10,6 +10,9 @@ function debugLog(message, data = null) {
   }
 }
 
+// Flag to track if Cloudflare observer is active
+let cloudflareObserverActive = false;
+
 // Initialize captcha counter from storage
 let captchaCounter = 0;
 chrome.storage.local.get(['captchaCounter'], (result) => {
@@ -101,6 +104,9 @@ chrome.runtime.onMessage.addListener((message) => {
 
 // Auto-execute when loaded on the visa scheduling site
 checkAndHandlePage();
+
+// Initialize Cloudflare observer
+initCloudflareObserver();
 
 // Function to check the current page and handle accordingly
 function checkAndHandlePage() {
@@ -1997,6 +2003,86 @@ async function waitForTimeSelection() {
 
     // Start checking
     checkTimeSelection();
+  });
+}
+
+// Function to initialize Cloudflare Turnstile observer
+function initCloudflareObserver() {
+  // Check if observer is already active
+  if (cloudflareObserverActive) {
+    debugLog('Cloudflare observer already active, skipping initialization');
+    return;
+  }
+
+  // Check if auto-click for Cloudflare is enabled
+  chrome.storage.local.get(['autoCloudflareEnabled'], (result) => {
+    const autoCloudflareEnabled = result.autoCloudflareEnabled !== undefined ? result.autoCloudflareEnabled : true;
+
+    if (!autoCloudflareEnabled) {
+      debugLog('Auto-click for Cloudflare is disabled, skipping observer setup');
+      return;
+    }
+
+    debugLog('Setting up Cloudflare Turnstile observer');
+    cloudflareObserverActive = true;
+
+    // Create a mutation observer to watch for Cloudflare elements
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          // Check for Cloudflare checkbox
+          checkForCloudflareCheckbox();
+        }
+      }
+    });
+
+    // Start observing the document body for changes
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Also check immediately in case the element is already present
+    checkForCloudflareCheckbox();
+
+    debugLog('Cloudflare Turnstile observer initialized');
+  });
+}
+
+// Function to check for and click Cloudflare checkbox
+function checkForCloudflareCheckbox() {
+  // Check if auto-click for Cloudflare is enabled
+  chrome.storage.local.get(['autoCloudflareEnabled'], (result) => {
+    const autoCloudflareEnabled = result.autoCloudflareEnabled !== undefined ? result.autoCloudflareEnabled : true;
+
+    if (!autoCloudflareEnabled) {
+      return;
+    }
+
+    // Look for Cloudflare checkbox using various selectors
+    const selectors = [
+      // Common Cloudflare Turnstile selectors
+      '.cb-lb input[type="checkbox"]',
+      '#aPYp3 input[type="checkbox"]',
+      '.cb-c input[type="checkbox"]',
+      // Add more selectors if needed
+    ];
+
+    for (const selector of selectors) {
+      const checkbox = document.querySelector(selector);
+      if (checkbox && !checkbox.checked) {
+        debugLog('Found Cloudflare Turnstile checkbox, clicking it');
+
+        // Click the checkbox
+        try {
+          checkbox.click();
+          showNotification('✅ Cloudflare verification checkbox clicked automatically', 3000);
+          debugLog('Successfully clicked Cloudflare checkbox');
+        } catch (error) {
+          debugLog('Error clicking Cloudflare checkbox:', { error: error.toString() });
+        }
+
+        // Only try to click one checkbox
+        break;
+      }
+    }
   });
 }
 

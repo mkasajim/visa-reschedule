@@ -16,7 +16,8 @@ chrome.runtime.onInstalled.addListener(() => {
   // Initialize default settings
   chrome.storage.local.set({
     autoLoginEnabled: false,
-    autoSubmitEnabled: false
+    autoSubmitEnabled: false,
+    autoCloudflareEnabled: true  // Enable Cloudflare auto-click by default
   });
 });
 
@@ -26,6 +27,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleAutoLoginToggle(message.isEnabled);
   } else if (message.action === 'toggleAutoReschedule') {
     handleAutoRescheduleToggle(message.isEnabled);
+  } else if (message.action === 'toggleAutoCloudflare') {
+    // Handle Cloudflare toggle
+    debugLog(`Auto Cloudflare checkbox ${message.isEnabled ? 'enabled' : 'disabled'}`);
   }
 });
 

@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const autoLoginToggle = document.getElementById('autoLoginToggle');
   const autoRescheduleToggle = document.getElementById('autoRescheduleToggle');
   const autoSubmitToggle = document.getElementById('autoSubmitToggle');
+  const autoCloudflareToggle = document.getElementById('autoCloudflareToggle');
   const statusMessage = document.getElementById('statusMessage');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
@@ -32,6 +33,7 @@ document.addEventListener('DOMContentLoaded', function() {
       'autoLoginEnabled',
       'autoRescheduleEnabled',
       'autoSubmitEnabled',
+      'autoCloudflareEnabled',
       'username',
       'password',
       'enableGemini',
@@ -46,6 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
       autoLoginToggle.checked = result.autoLoginEnabled || false;
       autoRescheduleToggle.checked = result.autoRescheduleEnabled || false;
       autoSubmitToggle.checked = result.autoSubmitEnabled || false;
+      autoCloudflareToggle.checked = result.autoCloudflareEnabled || false;
 
       // Set saved credentials
       usernameInput.value = result.username || '';
@@ -133,6 +136,29 @@ document.addEventListener('DOMContentLoaded', function() {
           updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
         }, 2000);
       }
+    });
+  });
+
+  // Toggle event listener for auto Cloudflare checkbox
+  autoCloudflareToggle.addEventListener('change', function() {
+    const isCloudflareEnabled = autoCloudflareToggle.checked;
+
+    // Save to storage
+    chrome.storage.local.set({ autoCloudflareEnabled: isCloudflareEnabled }, function() {
+      // Update status message
+      statusMessage.textContent = `Status: Auto Cloudflare Checkbox ${isCloudflareEnabled ? 'Enabled' : 'Disabled'}`;
+      statusMessage.style.color = '#2196F3';
+
+      // Notify background script about the toggle change
+      chrome.runtime.sendMessage({
+        action: 'toggleAutoCloudflare',
+        isEnabled: isCloudflareEnabled
+      });
+
+      // Reset to normal status after 2 seconds
+      setTimeout(() => {
+        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+      }, 2000);
     });
   });
 
@@ -333,6 +359,7 @@ document.addEventListener('DOMContentLoaded', function() {
           if (settings.autoLoginEnabled !== undefined) autoLoginToggle.checked = settings.autoLoginEnabled;
           if (settings.autoRescheduleEnabled !== undefined) autoRescheduleToggle.checked = settings.autoRescheduleEnabled;
           if (settings.autoSubmitEnabled !== undefined) autoSubmitToggle.checked = settings.autoSubmitEnabled;
+          if (settings.autoCloudflareEnabled !== undefined) autoCloudflareToggle.checked = settings.autoCloudflareEnabled;
 
           if (settings.startDate) startDateInput.value = settings.startDate;
           if (settings.endDate) endDateInput.value = settings.endDate;

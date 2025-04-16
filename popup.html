@@ -225,12 +225,13 @@
 
   <div id="nativeMouseAutomationControls" style="margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; display: none;">
     <h4 style="margin-top: 0; margin-bottom: 10px;">Native Mouse Automation</h4>
-    <p style="font-size: 12px; margin-bottom: 10px;">
-      Position your mouse over the Cloudflare checkbox and click the button below to save the position.
+    <p style="font-size: 12px; margin-bottom: 10px;" id="positionInstructions">
+      Click the button below to start tracking mouse position. Then click at the Cloudflare checkbox location to save it.
     </p>
-    <button id="saveCloudflareCheckboxPosition" style="background-color: #2196F3; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
-      Save Current Mouse Position
+    <button id="trackMousePosition" style="background-color: #2196F3; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+      Start Tracking Mouse Position
     </button>
+    <div id="currentMousePosition" style="margin-top: 10px; font-size: 12px; display: none;">Current position: X=0, Y=0</div>
     <div id="savedPositionInfo" style="margin-top: 10px; font-size: 12px;"></div>
   </div>
 

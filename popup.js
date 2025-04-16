@@ -1,4 +1,15 @@
 document.addEventListener('DOMContentLoaded', function() {
+  // Clean up when popup is closed
+  window.addEventListener('unload', function() {
+    // Clear any tracking intervals
+    if (mouseTrackingInterval) {
+      clearInterval(mouseTrackingInterval);
+      mouseTrackingInterval = null;
+    }
+
+    // Remove any event listeners
+    document.removeEventListener('click', saveMousePositionOnClick);
+  });
   // Get DOM elements
   const autoLoginToggle = document.getElementById('autoLoginToggle');
   const autoRescheduleToggle = document.getElementById('autoRescheduleToggle');
@@ -6,12 +17,18 @@ document.addEventListener('DOMContentLoaded', function() {
   const autoCloudflareToggle = document.getElementById('autoCloudflareToggle');
   const useNativeMouseAutomationToggle = document.getElementById('useNativeMouseAutomationToggle');
   const nativeMouseAutomationControls = document.getElementById('nativeMouseAutomationControls');
-  const saveCloudflareCheckboxPosition = document.getElementById('saveCloudflareCheckboxPosition');
+  const trackMousePosition = document.getElementById('trackMousePosition');
+  const positionInstructions = document.getElementById('positionInstructions');
+  const currentMousePosition = document.getElementById('currentMousePosition');
   const savedPositionInfo = document.getElementById('savedPositionInfo');
   const statusMessage = document.getElementById('statusMessage');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
   const saveButton = document.getElementById('saveCredentials');
+
+  // Mouse tracking state
+  let isTrackingMouse = false;
+  let mouseTrackingInterval = null;
 
   // Date range elements
   const startDateInput = document.getElementById('startDate');
@@ -199,57 +216,129 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Save Cloudflare checkbox position button
-  saveCloudflareCheckboxPosition.addEventListener('click', function() {
-    // Make a request to the server to save the current mouse position
-    fetch('http://localhost:3000/mouse/save-position', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        name: 'cloudflareCheckbox'
+  // Track mouse position button
+  trackMousePosition.addEventListener('click', function() {
+    if (!isTrackingMouse) {
+      // Start tracking mouse position
+      isTrackingMouse = true;
+      trackMousePosition.textContent = 'Click at Cloudflare Checkbox Position';
+      trackMousePosition.style.backgroundColor = '#ff9800';
+      positionInstructions.textContent = 'Move your mouse to the Cloudflare checkbox position and click to save it.';
+      currentMousePosition.style.display = 'block';
+
+      // Start interval to get current mouse position
+      mouseTrackingInterval = setInterval(() => {
+        fetch('http://localhost:3000/mouse/position')
+          .then(response => response.json())
+          .then(position => {
+            currentMousePosition.textContent = `Current position: X=${position.x}, Y=${position.y}`;
+          })
+          .catch(error => {
+            console.error('Error getting mouse position:', error);
+            currentMousePosition.textContent = 'Error getting mouse position';
+          });
+      }, 100); // Update every 100ms
+
+      // Listen for click to save position
+      document.addEventListener('click', saveMousePositionOnClick);
+
+      // Update status message
+      statusMessage.textContent = 'Status: Tracking mouse position. Click at the Cloudflare checkbox.';
+      statusMessage.style.color = '#ff9800';
+    } else {
+      // Stop tracking mouse position
+      stopMouseTracking();
+    }
+  });
+
+  // Function to save mouse position when user clicks
+  function saveMousePositionOnClick(event) {
+    // Ignore clicks on the track button itself to prevent immediate saving
+    if (event.target === trackMousePosition) {
+      return;
+    }
+
+    // Get current mouse position
+    fetch('http://localhost:3000/mouse/position')
+      .then(response => response.json())
+      .then(position => {
+        // Save the position with name 'cloudflareCheckbox'
+        return fetch('http://localhost:3000/mouse/save-position', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: 'cloudflareCheckbox'
+          })
+        });
       })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        // Save the position in Chrome storage
-        chrome.storage.local.set({ cloudflareCheckboxPosition: data.position }, function() {
-          // Update saved position info
-          savedPositionInfo.textContent = `Saved position: X=${data.position.x}, Y=${data.position.y}`;
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Save the position in Chrome storage
+          chrome.storage.local.set({ cloudflareCheckboxPosition: data.position }, function() {
+            // Update saved position info
+            savedPositionInfo.textContent = `Saved position: X=${data.position.x}, Y=${data.position.y}`;
 
-          // Update status message
-          statusMessage.textContent = 'Status: Cloudflare checkbox position saved successfully';
-          statusMessage.style.color = 'green';
+            // Update status message
+            statusMessage.textContent = 'Status: Cloudflare checkbox position saved successfully';
+            statusMessage.style.color = 'green';
 
-          // Reset to normal status after 2 seconds
+            // Reset to normal status after 2 seconds
+            setTimeout(() => {
+              updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+            }, 2000);
+          });
+        } else {
+          // Show error message
+          statusMessage.textContent = `Status: Error saving position - ${data.error}`;
+          statusMessage.style.color = 'red';
+
+          // Reset to normal status after 3 seconds
           setTimeout(() => {
             updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
-          }, 2000);
-        });
-      } else {
+          }, 3000);
+        }
+
+        // Stop tracking after saving
+        stopMouseTracking();
+      })
+      .catch(error => {
         // Show error message
-        statusMessage.textContent = `Status: Error saving position - ${data.error}`;
+        statusMessage.textContent = `Status: Error communicating with server - ${error.message}`;
         statusMessage.style.color = 'red';
 
         // Reset to normal status after 3 seconds
         setTimeout(() => {
           updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
         }, 3000);
-      }
-    })
-    .catch(error => {
-      // Show error message
-      statusMessage.textContent = `Status: Error communicating with server - ${error.message}`;
-      statusMessage.style.color = 'red';
 
-      // Reset to normal status after 3 seconds
-      setTimeout(() => {
-        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
-      }, 3000);
-    });
-  });
+        // Stop tracking after error
+        stopMouseTracking();
+      });
+
+    // Remove the click event listener to prevent multiple saves
+    document.removeEventListener('click', saveMousePositionOnClick);
+  }
+
+  // Function to stop mouse tracking
+  function stopMouseTracking() {
+    isTrackingMouse = false;
+    trackMousePosition.textContent = 'Start Tracking Mouse Position';
+    trackMousePosition.style.backgroundColor = '#2196F3';
+    positionInstructions.textContent = 'Click the button below to start tracking mouse position. Then click at the Cloudflare checkbox location to save it.';
+    currentMousePosition.style.display = 'none';
+
+    // Clear the tracking interval
+    if (mouseTrackingInterval) {
+      clearInterval(mouseTrackingInterval);
+      mouseTrackingInterval = null;
+    }
+
+    // Remove the click event listener
+    document.removeEventListener('click', saveMousePositionOnClick);
+  }
 
   // Save credentials button
   saveButton.addEventListener('click', function() {

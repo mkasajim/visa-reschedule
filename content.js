@@ -586,16 +586,73 @@ function clickHumanVerificationCheckbox() {
       if (turnstileScript) {
         debugLog('Found Turnstile script, attempting to reload it');
 
-        // Create a new script element
-        const newScript = document.createElement('script');
-        newScript.src = turnstileScript.src;
+        // Instead of reloading the script (which might be blocked by CSP),
+        // try to execute the Cloudflare challenge directly
+        try {
+          // Look for the Cloudflare challenge object in the window
+          if (window._cf_chl_opt) {
+            debugLog('Found Cloudflare challenge object, attempting to trigger it directly');
+            showNotification('🔄 Attempting to trigger Cloudflare challenge directly...', 3000);
 
-        // Remove the old script and add the new one
-        if (turnstileScript.parentNode) {
-          turnstileScript.parentNode.removeChild(turnstileScript);
-          document.head.appendChild(newScript);
-          showNotification('🔄 Attempting to reload Turnstile script...', 3000);
+            // Try to execute the challenge function if it exists
+            if (typeof window._cf_chl_done === 'function') {
+              debugLog('Calling _cf_chl_done() function');
+              window._cf_chl_done();
+            }
+
+            // Try to set the challenge as completed
+            if (window._cf_chl_ctx) {
+              debugLog('Setting challenge context as completed');
+              window._cf_chl_ctx.complete = true;
+            }
+          }
+        } catch (e) {
+          debugLog('Error triggering Cloudflare challenge directly:', { error: e.toString() });
         }
+      }
+
+      // Try to find and interact with the Turnstile iframe if it exists
+      const turnstileIframe = document.querySelector('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]');
+      if (turnstileIframe) {
+        debugLog('Found Turnstile iframe, attempting to interact with it');
+        showNotification('🔄 Found Turnstile iframe, interacting with it...', 3000);
+
+        // Focus the iframe
+        turnstileIframe.focus();
+
+        // Try to access the iframe content (may fail due to same-origin policy)
+        try {
+          const iframeDoc = turnstileIframe.contentDocument || turnstileIframe.contentWindow?.document;
+          if (iframeDoc) {
+            debugLog('Successfully accessed iframe content');
+
+            // Look for any buttons or checkboxes in the iframe
+            const clickables = iframeDoc.querySelectorAll('button, input[type="checkbox"], [role="button"]');
+            if (clickables.length > 0) {
+              debugLog(`Found ${clickables.length} clickable elements in iframe`);
+              Array.from(clickables).forEach((el, i) => {
+                setTimeout(() => {
+                  try {
+                    el.click();
+                    debugLog(`Clicked element ${i + 1} in iframe`);
+                  } catch (e) {
+                    debugLog(`Error clicking element in iframe:`, { error: e.toString() });
+                  }
+                }, i * 200);
+              });
+            }
+          }
+        } catch (e) {
+          // Expected due to same-origin policy
+          debugLog('Could not access iframe content (expected due to same-origin policy)');
+        }
+
+        // Click in the center of the iframe
+        const rect = turnstileIframe.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        simulateClickAt(centerX, centerY);
+        debugLog(`Clicked at center of Turnstile iframe (${Math.round(centerX)}, ${Math.round(centerY)})`);
       }
 
       // Try to dispatch custom events that might trigger the widget
@@ -606,14 +663,25 @@ function clickHumanVerificationCheckbox() {
         'challenge:complete',
         'click',
         'focus',
-        'mouseover'
+        'mouseover',
+        'load',
+        'DOMContentLoaded'
       ];
 
       events.forEach(eventName => {
         try {
-          const event = new CustomEvent(eventName);
-          container.dispatchEvent(event);
-          debugLog(`Dispatched ${eventName} event to Turnstile container`);
+          // Dispatch to container
+          const containerEvent = new CustomEvent(eventName);
+          container.dispatchEvent(containerEvent);
+
+          // Also dispatch to document and window
+          const docEvent = new CustomEvent(eventName);
+          document.dispatchEvent(docEvent);
+
+          const windowEvent = new CustomEvent(eventName);
+          window.dispatchEvent(windowEvent);
+
+          debugLog(`Dispatched ${eventName} event to container, document, and window`);
         } catch (e) {
           debugLog(`Error dispatching ${eventName} event:`, { error: e.toString() });
         }
@@ -626,13 +694,44 @@ function clickHumanVerificationCheckbox() {
         hiddenElements.forEach((el, index) => {
           setTimeout(() => {
             try {
+              // Try to set the value if it's an input
+              if (el.tagName.toLowerCase() === 'input' && el.type === 'hidden') {
+                // For hidden inputs, try to set a non-empty value
+                const oldValue = el.value;
+                el.value = 'verified';
+                debugLog(`Set hidden input value from '${oldValue}' to 'verified'`);
+
+                // Dispatch change and input events
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+
+              // Click the element
               el.click();
               debugLog(`Clicked hidden element ${index + 1}/${hiddenElements.length}`);
             } catch (e) {
-              debugLog(`Error clicking hidden element ${index + 1}:`, { error: e.toString() });
+              debugLog(`Error interacting with hidden element ${index + 1}:`, { error: e.toString() });
             }
           }, index * 200);
         });
+      }
+
+      // As a last resort, try to reload the page after a delay
+      if (!window._triedReloadingForCloudflare) {
+        debugLog('Setting up delayed page reload as last resort');
+        setTimeout(() => {
+          // Only reload if we're still on the verification page
+          if (isOnHumanVerificationPage()) {
+            debugLog('Still on verification page after attempts, reloading page');
+            window._triedReloadingForCloudflare = true;
+            showNotification('🔄 Verification taking too long, reloading page...', 5000);
+
+            // Set a timeout to reload the page
+            setTimeout(() => {
+              window.location.reload();
+            }, 5000);
+          }
+        }, 15000); // Wait 15 seconds before deciding to reload
       }
 
       return true;

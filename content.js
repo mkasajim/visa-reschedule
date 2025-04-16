@@ -167,16 +167,30 @@ function handleHumanVerificationPage() {
   debugLog('Handling "Verify you are human" page');
   showNotification('🔍 Detected "Verify you are human" page, clicking checkbox...');
 
+  // Check if this is the first time we're handling this verification page
+  const isFirstDetection = !window._cloudflareVerificationDetected;
+  window._cloudflareVerificationDetected = true;
+
   // First try to use the native mouse automation server if enabled
   chrome.storage.local.get(['useNativeMouseAutomation', 'cloudflareCheckboxPosition'], (result) => {
     const useNativeMouseAutomation = result.useNativeMouseAutomation !== undefined ? result.useNativeMouseAutomation : false;
     const cloudflareCheckboxPosition = result.cloudflareCheckboxPosition || null;
 
     if (useNativeMouseAutomation && cloudflareCheckboxPosition) {
-      debugLog('Using native mouse automation to click at saved position');
-      clickWithNativeMouseAutomation('cloudflareCheckbox');
+      // If it's the first detection, wait 5 seconds for the page to fully load
+      const initialDelay = isFirstDetection ? 5000 : 0;
+
+      debugLog(`Using native mouse automation to click at saved position${isFirstDetection ? ' (waiting 5s for page load)' : ''}`);
+
+      if (isFirstDetection) {
+        showNotification('⏳ Waiting 5 seconds for page to load before clicking...');
+      }
+
+      setTimeout(() => {
+        clickWithNativeMouseAutomation('cloudflareCheckbox');
+      }, initialDelay);
     } else {
-      // Fall back to browser-based automation
+      // Only fall back to browser-based automation if native automation is disabled
       debugLog('Native mouse automation disabled or position not saved, using browser-based automation');
       clickHumanVerificationCheckbox();
     }
@@ -185,7 +199,17 @@ function handleHumanVerificationPage() {
   // Also set up periodic checking for the checkbox
   // This helps if the page refreshes or if the checkbox wasn't clickable initially
   if (!window._humanVerificationInterval) {
+    // Use a longer interval (3 seconds) between checks
     window._humanVerificationInterval = setInterval(() => {
+      // First check if we're still on the verification page
+      if (!isOnHumanVerificationPage()) {
+        debugLog('No longer on verification page, stopping periodic checks');
+        clearInterval(window._humanVerificationInterval);
+        window._humanVerificationInterval = null;
+        window._cloudflareVerificationDetected = false;
+        return;
+      }
+
       chrome.storage.local.get(['useNativeMouseAutomation', 'cloudflareCheckboxPosition'], (result) => {
         const useNativeMouseAutomation = result.useNativeMouseAutomation !== undefined ? result.useNativeMouseAutomation : false;
         const cloudflareCheckboxPosition = result.cloudflareCheckboxPosition || null;
@@ -194,17 +218,18 @@ function handleHumanVerificationPage() {
           debugLog('Using native mouse automation to click at saved position (periodic)');
           clickWithNativeMouseAutomation('cloudflareCheckbox');
         } else {
-          // Fall back to browser-based automation
+          // Only fall back to browser-based automation if native automation is disabled
           clickHumanVerificationCheckbox();
         }
       });
-    }, 2000); // Check every 2 seconds
+    }, 3000); // Check every 3 seconds
 
     // Clear the interval after 30 seconds to avoid indefinite checking
     setTimeout(() => {
       if (window._humanVerificationInterval) {
         clearInterval(window._humanVerificationInterval);
         window._humanVerificationInterval = null;
+        window._cloudflareVerificationDetected = false;
         debugLog('Stopped periodic human verification checkbox checking');
       }
     }, 30000);
@@ -853,23 +878,39 @@ function clickWithNativeMouseAutomation(positionName) {
   .then(data => {
     if (data.success) {
       debugLog(`Successfully clicked at saved position "${positionName}" using native mouse automation`);
-      showNotification(`✅ Clicked at position "${positionName}" using native mouse automation`, 3000);
+      showNotification(`✅ Clicked on Turnstile container using native mouse automation`, 3000);
     } else {
       debugLog(`Error clicking at saved position "${positionName}": ${data.error}`);
       showNotification(`❌ Error clicking at position "${positionName}": ${data.error}`, 3000);
 
-      // Fall back to browser-based automation
-      debugLog('Falling back to browser-based automation');
-      clickHumanVerificationCheckbox();
+      // Only fall back to browser-based automation if native automation is disabled
+      chrome.storage.local.get(['useNativeMouseAutomation'], (result) => {
+        const useNativeMouseAutomation = result.useNativeMouseAutomation !== undefined ? result.useNativeMouseAutomation : false;
+
+        if (!useNativeMouseAutomation) {
+          debugLog('Native mouse automation disabled, falling back to browser-based automation');
+          clickHumanVerificationCheckbox();
+        } else {
+          debugLog('Native mouse automation enabled but failed, not falling back to browser-based methods');
+        }
+      });
     }
   })
   .catch(error => {
     debugLog(`Error communicating with mouse automation server: ${error.toString()}`);
     showNotification(`❌ Error communicating with mouse automation server: ${error.toString()}`, 3000);
 
-    // Fall back to browser-based automation
-    debugLog('Falling back to browser-based automation');
-    clickHumanVerificationCheckbox();
+    // Only fall back to browser-based automation if native automation is disabled
+    chrome.storage.local.get(['useNativeMouseAutomation'], (result) => {
+      const useNativeMouseAutomation = result.useNativeMouseAutomation !== undefined ? result.useNativeMouseAutomation : false;
+
+      if (!useNativeMouseAutomation) {
+        debugLog('Native mouse automation disabled, falling back to browser-based automation');
+        clickHumanVerificationCheckbox();
+      } else {
+        debugLog('Native mouse automation enabled but failed, not falling back to browser-based methods');
+      }
+    });
   });
 }
 
@@ -1980,7 +2021,7 @@ async function findAvailableDates(startDate, endDate) {
       }
 
       // Show notification with download button
-      const notificationElement = showNotification(`✅ Found available date: ${humanReadableDate}${isInRange ? '' : ' (outside preferred range)'}`, 30000);
+      showNotification(`✅ Found available date: ${humanReadableDate}${isInRange ? '' : ' (outside preferred range)'}`, 30000);
 
       // Add a download button to the notification
       // const downloadButton = document.createElement('button');
@@ -2019,7 +2060,7 @@ async function findAvailableDates(startDate, endDate) {
         }
 
         // Show notification with download button
-        const notificationElement = showNotification(`✅ Found available date: ${humanReadableDate}`, 30000);
+        showNotification(`✅ Found available date: ${humanReadableDate}`, 30000);
 
         // Add a download button to the notification
         // const downloadButton = document.createElement('button');
@@ -2099,7 +2140,7 @@ async function findAvailableDates(startDate, endDate) {
                   notificationMessage += '\n\nPlease review and click the Submit button manually.';
                 }
 
-                const notificationElement = showNotification(notificationMessage, 30000);
+                showNotification(notificationMessage, 30000);
 
                 // If auto-submit is enabled, click the submit button
                 if (autoSubmitEnabled) {

@@ -187,147 +187,319 @@ function handleHumanVerificationPage() {
 
 // Function to click the human verification checkbox
 function clickHumanVerificationCheckbox() {
-  // Try multiple selectors to find the checkbox
-  const selectors = [
-    // Original selector
-    '.cb-lb input[type="checkbox"]',
-    // Cloudflare turnstile selectors
-    'input[name="cf-turnstile-response"]',
-    '#cf-chl-widget-667ql_response',
-    'input[type="checkbox"][id*="cf-"]',
-    // Generic checkbox selectors that might be related to verification
-    'input[type="checkbox"]',
-    // Iframe selectors (in case the checkbox is in an iframe)
-    'iframe[src*="cloudflare"]',
-    'iframe[src*="turnstile"]',
-    'iframe[title*="challenge"]'
-  ];
+  debugLog('Starting enhanced checkbox detection and clicking');
 
-  // Try each selector
-  let foundElement = null;
-  let isIframe = false;
-
-  for (const selector of selectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      foundElement = element;
-      isIframe = element.tagName.toLowerCase() === 'iframe';
-      debugLog(`Found element with selector: ${selector}`, {
-        tagName: element.tagName,
-        type: element.type,
-        id: element.id,
-        isIframe: isIframe
-      });
-      break;
+  // First, try to find the Cloudflare widget container
+  const findCloudflareWidget = () => {
+    // Look for the turnstile widget container - this is the most reliable way
+    // The container is usually a div with an iframe inside it
+    const turnstileContainers = document.querySelectorAll('div[id^="turnstile_"], div[class*="turnstile"], div[class*="cf-"], div[id*="cf-"]');
+    if (turnstileContainers.length > 0) {
+      debugLog(`Found ${turnstileContainers.length} potential turnstile containers`);
+      return turnstileContainers[0];
     }
-  }
 
-  if (!foundElement) {
-    debugLog('Could not find any verification element to interact with');
-
-    // As a last resort, try to find any clickable element in the challenge area
-    const challengeArea = document.querySelector('.main-content') || document.body;
-    const clickableElements = challengeArea.querySelectorAll('button, input, a, [role="button"]');
-
-    if (clickableElements.length > 0) {
-      debugLog(`Found ${clickableElements.length} potential clickable elements in challenge area`);
-      foundElement = clickableElements[0];
-    } else {
-      // If we still can't find anything, try to trigger the Cloudflare challenge manually
-      debugLog('Attempting to trigger Cloudflare challenge manually');
-      triggerCloudflareChallenge();
-      return;
+    // Look for any iframe that might be the Cloudflare widget
+    const iframes = document.querySelectorAll('iframe');
+    for (const iframe of iframes) {
+      const src = iframe.src || '';
+      if (src.includes('cloudflare') || src.includes('turnstile') || src.includes('challenge')) {
+        debugLog('Found Cloudflare iframe:', { src });
+        return iframe;
+      }
     }
-  }
 
-  // Handle iframe case differently
-  if (isIframe) {
-    debugLog('Found iframe, attempting to interact with its content');
+    // Look for the grid container that might contain the widget
+    const gridContainers = document.querySelectorAll('div[style*="display: grid"]');
+    if (gridContainers.length > 0) {
+      debugLog(`Found ${gridContainers.length} grid containers that might contain the widget`);
+      return gridContainers[0];
+    }
+
+    return null;
+  };
+
+  // Find all checkboxes on the page
+  const findAllCheckboxes = () => {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    debugLog(`Found ${checkboxes.length} checkboxes on the page`);
+    return Array.from(checkboxes);
+  };
+
+  // Find all clickable elements that might be related to verification
+  const findAllClickableElements = () => {
+    // Look for elements with specific attributes or classes that suggest they're interactive
+    const elements = document.querySelectorAll(
+      'button, input[type="button"], input[type="submit"], a[role="button"], [class*="button"], [role="button"], [aria-role="button"], [tabindex="0"]'
+    );
+    debugLog(`Found ${elements.length} potentially clickable elements`);
+    return Array.from(elements);
+  };
+
+  // Try to find the checkbox by looking for specific patterns in the DOM
+  const findCloudflareCheckbox = () => {
+    // Method 1: Direct checkbox selectors
+    const checkboxSelectors = [
+      '.cb-lb input[type="checkbox"]',
+      'input[type="checkbox"][id*="cf-"]',
+      'input[type="checkbox"][class*="cf-"]',
+      'input[type="checkbox"][id*="turnstile"]',
+      'input[type="checkbox"][class*="turnstile"]',
+      // Generic checkbox that might be the only one on the page
+      'input[type="checkbox"]'
+    ];
+
+    for (const selector of checkboxSelectors) {
+      const checkboxes = document.querySelectorAll(selector);
+      if (checkboxes.length > 0) {
+        debugLog(`Found ${checkboxes.length} checkboxes with selector: ${selector}`);
+        return checkboxes[0];
+      }
+    }
+
+    // Method 2: Look for checkboxes near verification text
+    const verifyTextElements = Array.from(document.querySelectorAll('*')).filter(el => {
+      const text = el.textContent.trim().toLowerCase();
+      return text.includes('verify') || text.includes('human') || text.includes('robot') || text.includes('captcha');
+    });
+
+    if (verifyTextElements.length > 0) {
+      debugLog(`Found ${verifyTextElements.length} elements with verification-related text`);
+
+      // For each text element, look for nearby checkboxes
+      for (const textEl of verifyTextElements) {
+        // Try to find a checkbox in the parent or siblings
+        const parent = textEl.parentElement;
+        if (parent) {
+          const nearbyCheckbox = parent.querySelector('input[type="checkbox"]');
+          if (nearbyCheckbox) {
+            debugLog('Found checkbox near verification text');
+            return nearbyCheckbox;
+          }
+
+          // Try one level up
+          const grandparent = parent.parentElement;
+          if (grandparent) {
+            const nearbyCheckbox = grandparent.querySelector('input[type="checkbox"]');
+            if (nearbyCheckbox) {
+              debugLog('Found checkbox near verification text (grandparent)');
+              return nearbyCheckbox;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  // Function to handle clicking on an element
+  const clickElement = (element, description) => {
+    if (!element) return false;
+
+    debugLog(`Clicking on ${description}:`, {
+      tagName: element.tagName,
+      id: element.id,
+      className: element.className,
+      type: element.type
+    });
+
     try {
-      // Try to focus the iframe first
-      foundElement.focus();
-      showNotification('🔍 Focusing on verification iframe...', 3000);
+      // Scroll into view
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-      // Try to click in the center of the iframe
-      const rect = foundElement.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
+      // Wait a moment after scrolling
+      setTimeout(() => {
+        try {
+          // First try to focus
+          element.focus();
 
-      // Create a click event at the center of the iframe
-      simulateClickAt(centerX, centerY);
+          // Simulate mouse movement
+          const rect = element.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
 
-      debugLog('Clicked in the center of the iframe');
-    } catch (error) {
-      debugLog('Error interacting with iframe:', { error: error.toString() });
-    }
-    return;
-  }
+          // Create mouseover event
+          const mouseoverEvent = new MouseEvent('mouseover', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: centerX,
+            clientY: centerY
+          });
+          element.dispatchEvent(mouseoverEvent);
 
-  // For regular elements, proceed with clicking
-  if (foundElement) {
-    debugLog('Found verification element, clicking it');
+          // Short delay before clicking
+          setTimeout(() => {
+            // Create mousedown event
+            const mousedownEvent = new MouseEvent('mousedown', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: centerX,
+              clientY: centerY
+            });
+            element.dispatchEvent(mousedownEvent);
 
-    // Simulate a more human-like click with a slight delay
-    setTimeout(() => {
-      try {
-        // Scroll the element into view first
-        foundElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        // Create and dispatch mouse events to simulate human interaction
-        // First move to the element
-        const moveEvent = new MouseEvent('mouseover', {
-          bubbles: true,
-          cancelable: true,
-          view: window
-        });
-        foundElement.dispatchEvent(moveEvent);
-
-        // Then click after a small delay
-        setTimeout(() => {
-          // For checkbox type inputs
-          if (foundElement.type === 'checkbox' && !foundElement.checked) {
+            // Create click event
             const clickEvent = new MouseEvent('click', {
               bubbles: true,
               cancelable: true,
-              view: window
+              view: window,
+              clientX: centerX,
+              clientY: centerY
             });
-            foundElement.dispatchEvent(clickEvent);
+            element.dispatchEvent(clickEvent);
 
-            // Show notification only if the click was successful
-            if (foundElement.checked) {
-              showNotification('✅ Human verification checkbox clicked automatically', 3000);
-              debugLog('Successfully clicked human verification checkbox');
-            } else {
-              // If direct event dispatch didn't work, try the regular click
-              foundElement.click();
-              showNotification('✅ Attempted to click human verification element', 3000);
-              debugLog('Attempted to click human verification element (fallback method)');
+            // Create mouseup event
+            const mouseupEvent = new MouseEvent('mouseup', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: centerX,
+              clientY: centerY
+            });
+            element.dispatchEvent(mouseupEvent);
+
+            // Fallback to direct click if events don't work
+            if (element.type === 'checkbox' && !element.checked) {
+              element.click();
             }
-          } else {
-            // For non-checkbox elements or hidden inputs
-            try {
-              // Try to focus and click
-              foundElement.focus();
-              foundElement.click();
 
-              // For turnstile inputs, we might need to trigger their events
-              if (foundElement.name === 'cf-turnstile-response') {
-                // Try to trigger the turnstile
-                triggerCloudflareChallenge();
-              }
+            showNotification(`✅ Clicked on ${description}`, 3000);
+            debugLog(`Successfully clicked on ${description}`);
 
-              showNotification('✅ Interacted with verification element', 3000);
-              debugLog('Successfully interacted with verification element');
-            } catch (error) {
-              debugLog('Error clicking verification element:', { error: error.toString() });
+            // For iframes, also try clicking at the center coordinates
+            if (element.tagName.toLowerCase() === 'iframe') {
+              simulateClickAt(centerX, centerY);
             }
+          }, 100);
+        } catch (error) {
+          debugLog(`Error during click sequence for ${description}:`, { error: error.toString() });
+          // Last resort: direct click
+          try {
+            element.click();
+            showNotification(`✅ Clicked on ${description} (fallback method)`, 3000);
+            debugLog(`Clicked on ${description} using fallback method`);
+          } catch (clickError) {
+            debugLog(`Failed to click on ${description}:`, { error: clickError.toString() });
           }
-        }, 150); // Small delay between mouseover and click
-      } catch (error) {
-        debugLog('Error interacting with verification element:', { error: error.toString() });
+        }
+      }, 300);
+
+      return true;
+    } catch (error) {
+      debugLog(`Error clicking on ${description}:`, { error: error.toString() });
+      return false;
+    }
+  };
+
+  // Function to handle clicking in an iframe
+  const handleIframe = (iframe) => {
+    debugLog('Handling iframe interaction');
+
+    try {
+      // Focus the iframe
+      iframe.focus();
+
+      // Get iframe position
+      const rect = iframe.getBoundingClientRect();
+
+      // Click in multiple spots within the iframe to increase chances of hitting the checkbox
+      const spots = [
+        { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, // Center
+        { x: rect.left + rect.width / 4, y: rect.top + rect.height / 2 }, // Left center
+        { x: rect.left + (rect.width * 0.75), y: rect.top + rect.height / 2 }, // Right center
+        { x: rect.left + rect.width / 2, y: rect.top + rect.height / 4 }, // Top center
+        { x: rect.left + rect.width / 2, y: rect.top + (rect.height * 0.75) } // Bottom center
+      ];
+
+      // Click each spot with a delay
+      spots.forEach((spot, index) => {
+        setTimeout(() => {
+          simulateClickAt(spot.x, spot.y);
+          debugLog(`Clicked spot ${index + 1} in iframe at (${Math.round(spot.x)}, ${Math.round(spot.y)})`);
+        }, index * 300); // 300ms between clicks
+      });
+
+      showNotification('🔍 Interacting with verification iframe...', 3000);
+      return true;
+    } catch (error) {
+      debugLog('Error interacting with iframe:', { error: error.toString() });
+      return false;
+    }
+  };
+
+  // Function to try clicking on the Cloudflare widget directly
+  const clickOnWidget = () => {
+    const widget = findCloudflareWidget();
+    if (widget) {
+      if (widget.tagName.toLowerCase() === 'iframe') {
+        return handleIframe(widget);
+      } else {
+        // If it's a container, try to find a checkbox inside it
+        const checkbox = widget.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+          return clickElement(checkbox, 'checkbox inside widget container');
+        }
+
+        // If no checkbox, try clicking the container itself
+        return clickElement(widget, 'widget container');
       }
-    }, 100 + Math.random() * 200); // Random delay between 100-300ms to seem more human-like
+    }
+    return false;
+  };
+
+  // Main execution flow - try different methods in sequence
+
+  // Method 1: Try to find and click the Cloudflare checkbox directly
+  const checkbox = findCloudflareCheckbox();
+  if (checkbox) {
+    if (clickElement(checkbox, 'Cloudflare checkbox')) {
+      return; // Success!
+    }
   }
+
+  // Method 2: Try to click on the widget container or iframe
+  if (clickOnWidget()) {
+    return; // Success!
+  }
+
+  // Method 3: Try clicking on all checkboxes on the page
+  const allCheckboxes = findAllCheckboxes();
+  if (allCheckboxes.length > 0) {
+    debugLog('Trying to click all checkboxes on the page');
+    let clickedAny = false;
+
+    allCheckboxes.forEach((checkbox, index) => {
+      setTimeout(() => {
+        if (clickElement(checkbox, `checkbox ${index + 1}/${allCheckboxes.length}`)) {
+          clickedAny = true;
+        }
+      }, index * 500); // 500ms between clicks
+    });
+
+    if (clickedAny) return;
+  }
+
+  // Method 4: As a last resort, try clicking on any clickable element
+  const clickableElements = findAllClickableElements();
+  if (clickableElements.length > 0) {
+    debugLog('Trying to click on potentially clickable elements');
+
+    // Only try the first few elements to avoid clicking too many things
+    const elementsToTry = clickableElements.slice(0, 3);
+    elementsToTry.forEach((element, index) => {
+      setTimeout(() => {
+        clickElement(element, `clickable element ${index + 1}/${elementsToTry.length}`);
+      }, index * 1000); // 1 second between clicks
+    });
+    return;
+  }
+
+  // If all else fails, try to trigger the challenge manually
+  debugLog('All methods failed, attempting to trigger Cloudflare challenge manually');
+  triggerCloudflareChallenge();
 }
 
 // Function to simulate a click at specific coordinates
@@ -348,7 +520,7 @@ function simulateClickAt(x, y) {
 function triggerCloudflareChallenge() {
   debugLog('Attempting to trigger Cloudflare challenge manually');
 
-  // Look for the Cloudflare script
+  // Method 1: Try to reload the Cloudflare script
   const cfScript = document.querySelector('script[src*="challenge-platform"]');
   if (cfScript) {
     debugLog('Found Cloudflare challenge script, attempting to reload it');
@@ -362,23 +534,77 @@ function triggerCloudflareChallenge() {
       cfScript.parentNode.removeChild(cfScript);
       document.head.appendChild(newScript);
       showNotification('🔄 Attempting to trigger Cloudflare verification...', 3000);
-    }
-  } else {
-    // If we can't find the script, try to click any visible button
-    const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
-    const visibleButtons = buttons.filter(button => {
-      const style = window.getComputedStyle(button);
-      return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-    });
-
-    if (visibleButtons.length > 0) {
-      debugLog(`Found ${visibleButtons.length} visible buttons, clicking the first one`);
-      visibleButtons[0].click();
-      showNotification('🔄 Clicked a button to trigger verification', 3000);
-    } else {
-      debugLog('Could not find any way to trigger the Cloudflare challenge');
+      return true;
     }
   }
+
+  // Method 2: Try to find and trigger the turnstile widget
+  const turnstileWidgets = document.querySelectorAll('[id^="turnstile_"], [class*="turnstile"], [id*="cf-"]');
+  if (turnstileWidgets.length > 0) {
+    debugLog(`Found ${turnstileWidgets.length} potential turnstile widgets`);
+
+    // Try to trigger the turnstile by dispatching events
+    turnstileWidgets.forEach((widget, index) => {
+      try {
+        // Try to focus and click
+        widget.focus();
+        widget.click();
+
+        // Try to dispatch custom events that might trigger the widget
+        const event = new CustomEvent('turnstile:ready');
+        widget.dispatchEvent(event);
+
+        debugLog(`Triggered events on turnstile widget ${index + 1}`);
+      } catch (error) {
+        debugLog(`Error triggering turnstile widget ${index + 1}:`, { error: error.toString() });
+      }
+    });
+
+    showNotification('🔄 Attempted to trigger Cloudflare turnstile', 3000);
+    return true;
+  }
+
+  // Method 3: Try to click any visible button
+  const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
+  const visibleButtons = buttons.filter(button => {
+    const style = window.getComputedStyle(button);
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+  });
+
+  if (visibleButtons.length > 0) {
+    debugLog(`Found ${visibleButtons.length} visible buttons, clicking the first one`);
+    visibleButtons[0].click();
+    showNotification('🔄 Clicked a button to trigger verification', 3000);
+    return true;
+  }
+
+  // Method 4: Try to reload the page
+  debugLog('All methods failed, considering page reload');
+
+  // Check if we've already tried reloading
+  if (!window._triedReloadingForCloudflare) {
+    window._triedReloadingForCloudflare = true;
+
+    // Set a flag in session storage to indicate we've tried reloading
+    try {
+      sessionStorage.setItem('_cloudflareReloadAttempt', 'true');
+    } catch (e) {
+      // Session storage might not be available
+    }
+
+    // Show notification before reload
+    showNotification('🔄 Attempting to reload page to trigger verification...', 5000);
+
+    // Set a timeout to reload the page
+    setTimeout(() => {
+      window.location.reload();
+    }, 5000);
+
+    return true;
+  }
+
+  debugLog('Could not find any way to trigger the Cloudflare challenge');
+  return false;
 }
 
 // Function to check the current page and handle accordingly

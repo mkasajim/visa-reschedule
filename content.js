@@ -17,10 +17,13 @@ if (typeof window._cloudflareObserverActive === 'undefined') {
 }
 
 // Initialize captcha counter from storage
-let captchaCounter = 0;
-chrome.storage.local.get(['captchaCounter'], (result) => {
-  captchaCounter = result.captchaCounter || 0;
-});
+// Using window property to avoid duplicate declaration issues
+if (typeof window._captchaCounter === 'undefined') {
+  window._captchaCounter = 0;
+  chrome.storage.local.get(['captchaCounter'], (result) => {
+    window._captchaCounter = result.captchaCounter || 0;
+  });
+}
 
 // Add custom styles to the page for our notifications
 function injectCustomStyles() {
@@ -396,7 +399,12 @@ function clickHumanVerificationCheckbox() {
 
   // Function to handle clicking in an iframe
   const handleIframe = (iframe) => {
-    debugLog('Handling iframe interaction');
+    debugLog('Handling iframe interaction:', {
+      src: iframe.src || 'no-src',
+      id: iframe.id || 'no-id',
+      width: iframe.width,
+      height: iframe.height
+    });
 
     try {
       // Focus the iframe
@@ -404,23 +412,75 @@ function clickHumanVerificationCheckbox() {
 
       // Get iframe position
       const rect = iframe.getBoundingClientRect();
+      debugLog('Iframe position:', {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height
+      });
 
-      // Click in multiple spots within the iframe to increase chances of hitting the checkbox
-      const spots = [
-        { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, // Center
-        { x: rect.left + rect.width / 4, y: rect.top + rect.height / 2 }, // Left center
-        { x: rect.left + (rect.width * 0.75), y: rect.top + rect.height / 2 }, // Right center
-        { x: rect.left + rect.width / 2, y: rect.top + rect.height / 4 }, // Top center
-        { x: rect.left + rect.width / 2, y: rect.top + (rect.height * 0.75) } // Bottom center
-      ];
+      // For very small iframes, expand the click area
+      const minSize = 50; // Minimum size in pixels
+      const effectiveWidth = Math.max(rect.width, minSize);
+      const effectiveHeight = Math.max(rect.height, minSize);
+
+      // Create a more comprehensive grid of points to click
+      const rows = 3;
+      const cols = 3;
+      const spots = [];
+
+      // Generate a grid of points
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = rect.left + (effectiveWidth * (c + 0.5)) / cols;
+          const y = rect.top + (effectiveHeight * (r + 0.5)) / rows;
+          spots.push({ x, y });
+        }
+      }
+
+      // Add some random points for good measure
+      for (let i = 0; i < 3; i++) {
+        const x = rect.left + Math.random() * effectiveWidth;
+        const y = rect.top + Math.random() * effectiveHeight;
+        spots.push({ x, y });
+      }
 
       // Click each spot with a delay
       spots.forEach((spot, index) => {
         setTimeout(() => {
           simulateClickAt(spot.x, spot.y);
-          debugLog(`Clicked spot ${index + 1} in iframe at (${Math.round(spot.x)}, ${Math.round(spot.y)})`);
-        }, index * 300); // 300ms between clicks
+          debugLog(`Clicked spot ${index + 1}/${spots.length} in iframe at (${Math.round(spot.x)}, ${Math.round(spot.y)})`);
+        }, index * 200); // 200ms between clicks
       });
+
+      // Try to interact with the iframe content if possible
+      try {
+        const iframeContent = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeContent) {
+          debugLog('Successfully accessed iframe content');
+
+          // Look for clickable elements in the iframe
+          const clickableElements = iframeContent.querySelectorAll('button, input[type="checkbox"], input[type="button"], a, [role="button"]');
+          if (clickableElements.length > 0) {
+            debugLog(`Found ${clickableElements.length} clickable elements in iframe content`);
+
+            // Click each element
+            Array.from(clickableElements).forEach((element, index) => {
+              setTimeout(() => {
+                try {
+                  element.click();
+                  debugLog(`Clicked element ${index + 1}/${clickableElements.length} in iframe content`);
+                } catch (e) {
+                  debugLog(`Error clicking element in iframe: ${e.toString()}`);
+                }
+              }, 500 + index * 200);
+            });
+          }
+        }
+      } catch (e) {
+        // This is expected due to same-origin policy
+        debugLog('Could not access iframe content due to same-origin policy');
+      }
 
       showNotification('🔍 Interacting with verification iframe...', 3000);
       return true;
@@ -434,6 +494,72 @@ function clickHumanVerificationCheckbox() {
   const clickOnWidget = () => {
     const widget = findCloudflareWidget();
     if (widget) {
+      debugLog('Found Cloudflare widget:', {
+        tagName: widget.tagName,
+        id: widget.id,
+        className: widget.className
+      });
+
+      // Special handling for the ppIS7 grid container (Cloudflare Turnstile)
+      if (widget.id === 'ppIS7') {
+        debugLog('Found Cloudflare Turnstile container with ID ppIS7');
+
+        // Try to find the iframe that Cloudflare dynamically injects
+        const iframes = document.querySelectorAll('iframe');
+        debugLog(`Found ${iframes.length} iframes on the page`);
+
+        // If we found any iframes, try to interact with them
+        if (iframes.length > 0) {
+          let handledAnyIframe = false;
+
+          // Try each iframe
+          iframes.forEach((iframe, index) => {
+            setTimeout(() => {
+              debugLog(`Handling iframe ${index + 1}/${iframes.length}`);
+              if (handleIframe(iframe)) {
+                handledAnyIframe = true;
+              }
+            }, index * 500); // 500ms between iframes
+          });
+
+          if (handledAnyIframe) return true;
+        }
+
+        // If no iframes found or handling failed, try to interact with the container directly
+        // First, try to find any dynamically added elements inside the container
+        const allElements = widget.querySelectorAll('*');
+        debugLog(`Found ${allElements.length} elements inside the Turnstile container`);
+
+        // Look for any clickable elements
+        const clickableElements = Array.from(allElements).filter(el => {
+          const tagName = el.tagName.toLowerCase();
+          return tagName === 'button' || tagName === 'input' || tagName === 'a' ||
+                 el.getAttribute('role') === 'button' || el.getAttribute('tabindex') === '0';
+        });
+
+        if (clickableElements.length > 0) {
+          debugLog(`Found ${clickableElements.length} clickable elements inside Turnstile container`);
+          let clickedAny = false;
+
+          // Try clicking each element
+          clickableElements.forEach((element, index) => {
+            setTimeout(() => {
+              if (clickElement(element, `clickable element ${index + 1} in Turnstile container`)) {
+                clickedAny = true;
+              }
+            }, index * 300);
+          });
+
+          if (clickedAny) return true;
+        }
+
+        // If we still haven't found anything to click, try the container itself
+        // and also try to trigger the Turnstile script
+        triggerTurnstileWidget(widget);
+        return clickElement(widget, 'Turnstile container');
+      }
+
+      // Standard handling for other widgets
       if (widget.tagName.toLowerCase() === 'iframe') {
         return handleIframe(widget);
       } else {
@@ -448,6 +574,72 @@ function clickHumanVerificationCheckbox() {
       }
     }
     return false;
+  };
+
+  // Function to specifically trigger the Turnstile widget
+  const triggerTurnstileWidget = (container) => {
+    debugLog('Attempting to trigger Turnstile widget');
+
+    try {
+      // Try to find the turnstile script
+      const turnstileScript = document.querySelector('script[src*="turnstile"], script[src*="challenge"]');
+      if (turnstileScript) {
+        debugLog('Found Turnstile script, attempting to reload it');
+
+        // Create a new script element
+        const newScript = document.createElement('script');
+        newScript.src = turnstileScript.src;
+
+        // Remove the old script and add the new one
+        if (turnstileScript.parentNode) {
+          turnstileScript.parentNode.removeChild(turnstileScript);
+          document.head.appendChild(newScript);
+          showNotification('🔄 Attempting to reload Turnstile script...', 3000);
+        }
+      }
+
+      // Try to dispatch custom events that might trigger the widget
+      const events = [
+        'turnstile:ready',
+        'cf:ready',
+        'cf:challenge-complete',
+        'challenge:complete',
+        'click',
+        'focus',
+        'mouseover'
+      ];
+
+      events.forEach(eventName => {
+        try {
+          const event = new CustomEvent(eventName);
+          container.dispatchEvent(event);
+          debugLog(`Dispatched ${eventName} event to Turnstile container`);
+        } catch (e) {
+          debugLog(`Error dispatching ${eventName} event:`, { error: e.toString() });
+        }
+      });
+
+      // Try to find and click any hidden buttons or inputs
+      const hiddenElements = container.querySelectorAll('button, input, [role="button"]');
+      if (hiddenElements.length > 0) {
+        debugLog(`Found ${hiddenElements.length} potentially hidden elements in Turnstile container`);
+        hiddenElements.forEach((el, index) => {
+          setTimeout(() => {
+            try {
+              el.click();
+              debugLog(`Clicked hidden element ${index + 1}/${hiddenElements.length}`);
+            } catch (e) {
+              debugLog(`Error clicking hidden element ${index + 1}:`, { error: e.toString() });
+            }
+          }, index * 200);
+        });
+      }
+
+      return true;
+    } catch (error) {
+      debugLog('Error triggering Turnstile widget:', { error: error.toString() });
+      return false;
+    }
   };
 
   // Main execution flow - try different methods in sequence
@@ -904,8 +1096,8 @@ async function solveCaptcha() {
     debugLog('Attempting to solve CAPTCHA');
 
     // Increment captcha counter to use as unique ID for saved files
-    captchaCounter++;
-    chrome.storage.local.set({ captchaCounter: captchaCounter });
+    window._captchaCounter++;
+    chrome.storage.local.set({ captchaCounter: window._captchaCounter });
 
     // Try image CAPTCHA with Gemini
     const imageResult = await tryImageCaptcha();

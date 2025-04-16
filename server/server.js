@@ -319,6 +319,31 @@ app.post('/mouse/save-position', (req, res) => {
     res.json({ success: true, position: mousePos });
 });
 
+// Endpoint to save current position after a delay
+app.post('/mouse/save-position-delayed', (req, res) => {
+    const { name, delayMs = 2000 } = req.body;
+
+    if (!name) {
+        return res.status(400).json({ error: 'Position name is required' });
+    }
+
+    // Send immediate response to prevent client waiting
+    res.json({ success: true, message: `Will save position after ${delayMs}ms delay` });
+
+    // Wait for the specified delay
+    setTimeout(() => {
+        try {
+            const mousePos = robot.getMousePos();
+            savedPositions[name] = mousePos;
+            savePositionsToFile();
+
+            console.log(`Saved position "${name}" after ${delayMs}ms delay:`, mousePos);
+        } catch (err) {
+            console.error(`Error saving position after delay:`, err);
+        }
+    }, delayMs);
+});
+
 // Endpoint to get all saved positions
 app.get('/mouse/saved-positions', (req, res) => {
     res.json(savedPositions);

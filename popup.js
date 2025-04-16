@@ -226,101 +226,42 @@ document.addEventListener('DOMContentLoaded', function() {
       positionInstructions.textContent = 'Move your mouse to the Cloudflare checkbox position and click to save it.';
       currentMousePosition.style.display = 'block';
 
-      // Start interval to get current mouse position
+      // Start interval to get current mouse position via background script
       mouseTrackingInterval = setInterval(() => {
-        fetch('http://localhost:3000/mouse/position')
-          .then(response => response.json())
-          .then(position => {
-            currentMousePosition.textContent = `Current position: X=${position.x}, Y=${position.y}`;
-          })
-          .catch(error => {
-            console.error('Error getting mouse position:', error);
+        chrome.runtime.sendMessage({ action: 'startTrackingMousePosition' }, function(response) {
+          if (response && response.success && response.position) {
+            currentMousePosition.textContent = `Current position: X=${response.position.x}, Y=${response.position.y}`;
+          } else {
+            console.error('Error getting mouse position:', response ? response.error : 'No response');
             currentMousePosition.textContent = 'Error getting mouse position';
-          });
+          }
+        });
       }, 100); // Update every 100ms
-
-      // Listen for click to save position
-      document.addEventListener('click', saveMousePositionOnClick);
 
       // Update status message
       statusMessage.textContent = 'Status: Tracking mouse position. Click at the Cloudflare checkbox.';
       statusMessage.style.color = '#ff9800';
+
+      // Request delayed position save when popup closes
+      chrome.runtime.sendMessage({
+        action: 'saveMousePositionDelayed',
+        name: 'cloudflareCheckbox',
+        delayMs: 3000 // 3 seconds delay to give user time to click
+      }, function(response) {
+        if (response && response.success) {
+          console.log('Requested delayed position save:', response);
+        } else {
+          console.error('Error requesting delayed position save:', response ? response.error : 'No response');
+        }
+      });
+
+      // Show instructions to user
+      alert('Position your mouse over the Cloudflare checkbox and click it. The position will be saved automatically.');
     } else {
       // Stop tracking mouse position
       stopMouseTracking();
     }
   });
-
-  // Function to save mouse position when user clicks
-  function saveMousePositionOnClick(event) {
-    // Ignore clicks on the track button itself to prevent immediate saving
-    if (event.target === trackMousePosition) {
-      return;
-    }
-
-    // Get current mouse position
-    fetch('http://localhost:3000/mouse/position')
-      .then(response => response.json())
-      .then(position => {
-        // Save the position with name 'cloudflareCheckbox'
-        return fetch('http://localhost:3000/mouse/save-position', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: 'cloudflareCheckbox'
-          })
-        });
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          // Save the position in Chrome storage
-          chrome.storage.local.set({ cloudflareCheckboxPosition: data.position }, function() {
-            // Update saved position info
-            savedPositionInfo.textContent = `Saved position: X=${data.position.x}, Y=${data.position.y}`;
-
-            // Update status message
-            statusMessage.textContent = 'Status: Cloudflare checkbox position saved successfully';
-            statusMessage.style.color = 'green';
-
-            // Reset to normal status after 2 seconds
-            setTimeout(() => {
-              updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
-            }, 2000);
-          });
-        } else {
-          // Show error message
-          statusMessage.textContent = `Status: Error saving position - ${data.error}`;
-          statusMessage.style.color = 'red';
-
-          // Reset to normal status after 3 seconds
-          setTimeout(() => {
-            updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
-          }, 3000);
-        }
-
-        // Stop tracking after saving
-        stopMouseTracking();
-      })
-      .catch(error => {
-        // Show error message
-        statusMessage.textContent = `Status: Error communicating with server - ${error.message}`;
-        statusMessage.style.color = 'red';
-
-        // Reset to normal status after 3 seconds
-        setTimeout(() => {
-          updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
-        }, 3000);
-
-        // Stop tracking after error
-        stopMouseTracking();
-      });
-
-    // Remove the click event listener to prevent multiple saves
-    document.removeEventListener('click', saveMousePositionOnClick);
-  }
 
   // Function to stop mouse tracking
   function stopMouseTracking() {
@@ -336,9 +277,18 @@ document.addEventListener('DOMContentLoaded', function() {
       mouseTrackingInterval = null;
     }
 
-    // Remove the click event listener
-    document.removeEventListener('click', saveMousePositionOnClick);
+    // Notify background script to stop tracking
+    chrome.runtime.sendMessage({ action: 'stopTrackingMousePosition' });
   }
+
+  // Check for saved position on load
+  chrome.storage.local.get(['cloudflareCheckboxPosition'], function(result) {
+    if (result.cloudflareCheckboxPosition) {
+      savedPositionInfo.textContent = `Saved position: X=${result.cloudflareCheckboxPosition.x}, Y=${result.cloudflareCheckboxPosition.y}`;
+    } else {
+      savedPositionInfo.textContent = 'No position saved yet';
+    }
+  });
 
   // Save credentials button
   saveButton.addEventListener('click', function() {

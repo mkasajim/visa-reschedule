@@ -30,6 +30,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.action === 'toggleAutoCloudflare') {
     // Handle Cloudflare toggle
     debugLog(`Auto Cloudflare checkbox ${message.isEnabled ? 'enabled' : 'disabled'}`);
+  } else if (message.action === 'startTrackingMousePosition') {
+    // Start tracking mouse position
+    handleMousePositionTracking(true, sendResponse);
+    return true; // Will respond asynchronously
+  } else if (message.action === 'stopTrackingMousePosition') {
+    // Stop tracking mouse position
+    handleMousePositionTracking(false, sendResponse);
+    return true; // Will respond asynchronously
+  } else if (message.action === 'saveMousePositionDelayed') {
+    // Save mouse position after a delay
+    saveMousePositionWithDelay(message.name, message.delayMs, sendResponse);
+    return true; // Will respond asynchronously
   }
 });
 
@@ -237,6 +249,78 @@ async function solveCaptchaWithGemini(imageDataUrl, apiKey) {
     debugLog('Error solving captcha with Gemini:', error);
     return null;
   }
+}
+
+// Function to handle mouse position tracking
+function handleMousePositionTracking(startTracking, sendResponse) {
+  if (startTracking) {
+    // Make a request to get the current mouse position
+    fetch('http://localhost:3000/mouse/position')
+      .then(response => response.json())
+      .then(position => {
+        sendResponse({ success: true, position: position });
+      })
+      .catch(error => {
+        debugLog('Error getting mouse position:', error);
+        sendResponse({ success: false, error: error.toString() });
+      });
+  } else {
+    sendResponse({ success: true, message: 'Mouse tracking stopped' });
+  }
+}
+
+// Function to save mouse position with delay
+function saveMousePositionWithDelay(name, delayMs = 2000, sendResponse) {
+  if (!name) {
+    sendResponse({ success: false, error: 'Position name is required' });
+    return;
+  }
+
+  // Make a request to save the position after a delay
+  fetch('http://localhost:3000/mouse/save-position-delayed', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: name,
+      delayMs: delayMs
+    })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        debugLog(`Requested delayed save of position "${name}" with ${delayMs}ms delay`);
+
+        // Wait for the position to be saved
+        setTimeout(() => {
+          // Get the saved position
+          fetch('http://localhost:3000/mouse/saved-positions')
+            .then(response => response.json())
+            .then(positions => {
+              if (positions[name]) {
+                // Save the position in Chrome storage
+                chrome.storage.local.set({ cloudflareCheckboxPosition: positions[name] }, function() {
+                  debugLog(`Saved position "${name}" to Chrome storage:`, positions[name]);
+                  sendResponse({ success: true, position: positions[name] });
+                });
+              } else {
+                sendResponse({ success: false, error: `Position "${name}" not found after delay` });
+              }
+            })
+            .catch(error => {
+              debugLog(`Error getting saved position "${name}":`, error);
+              sendResponse({ success: false, error: error.toString() });
+            });
+        }, delayMs + 500); // Wait a bit longer than the server delay
+      } else {
+        sendResponse({ success: false, error: data.error });
+      }
+    })
+    .catch(error => {
+      debugLog(`Error requesting delayed save of position "${name}":`, error);
+      sendResponse({ success: false, error: error.toString() });
+    });
 }
 
 // Listen for messages from content script

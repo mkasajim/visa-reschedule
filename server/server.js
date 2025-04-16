@@ -305,18 +305,27 @@ app.get('/mouse/position', (req, res) => {
 
 // Endpoint to save a position with a name
 app.post('/mouse/save-position', (req, res) => {
-    const { name } = req.body;
+    const { name, position } = req.body;
 
     if (!name) {
         return res.status(400).json({ error: 'Position name is required' });
     }
 
-    const mousePos = robot.getMousePos();
-    savedPositions[name] = mousePos;
+    // If position is provided, use it; otherwise, use current mouse position
+    let positionToSave;
+    if (position && typeof position.x === 'number' && typeof position.y === 'number') {
+        positionToSave = position;
+        console.log(`Using provided position for "${name}":`, positionToSave);
+    } else {
+        positionToSave = robot.getMousePos();
+        console.log(`Using current mouse position for "${name}":`, positionToSave);
+    }
+
+    savedPositions[name] = positionToSave;
     savePositionsToFile();
 
-    console.log(`Saved position "${name}":`, mousePos);
-    res.json({ success: true, position: mousePos });
+    console.log(`Saved position "${name}":`, positionToSave);
+    res.json({ success: true, position: positionToSave });
 });
 
 // Endpoint to save current position after a delay

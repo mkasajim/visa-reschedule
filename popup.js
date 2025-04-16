@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', function() {
   const positionInstructions = document.getElementById('positionInstructions');
   const currentMousePosition = document.getElementById('currentMousePosition');
   const savedPositionInfo = document.getElementById('savedPositionInfo');
+  const manualXCoord = document.getElementById('manualXCoord');
+  const manualYCoord = document.getElementById('manualYCoord');
+  const saveManualCoordinates = document.getElementById('saveManualCoordinates');
   const statusMessage = document.getElementById('statusMessage');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
@@ -285,9 +288,62 @@ document.addEventListener('DOMContentLoaded', function() {
   chrome.storage.local.get(['cloudflareCheckboxPosition'], function(result) {
     if (result.cloudflareCheckboxPosition) {
       savedPositionInfo.textContent = `Saved position: X=${result.cloudflareCheckboxPosition.x}, Y=${result.cloudflareCheckboxPosition.y}`;
+
+      // Populate manual coordinate fields with saved values
+      manualXCoord.value = result.cloudflareCheckboxPosition.x;
+      manualYCoord.value = result.cloudflareCheckboxPosition.y;
     } else {
       savedPositionInfo.textContent = 'No position saved yet';
     }
+  });
+
+  // Save manual coordinates button
+  saveManualCoordinates.addEventListener('click', function() {
+    const x = parseInt(manualXCoord.value);
+    const y = parseInt(manualYCoord.value);
+
+    if (isNaN(x) || isNaN(y)) {
+      statusMessage.textContent = 'Status: Please enter valid X and Y coordinates';
+      statusMessage.style.color = 'red';
+      return;
+    }
+
+    const position = { x, y };
+
+    // Save the position in Chrome storage
+    chrome.storage.local.set({ cloudflareCheckboxPosition: position }, function() {
+      // Update saved position info
+      savedPositionInfo.textContent = `Saved position: X=${position.x}, Y=${position.y}`;
+
+      // Update status message
+      statusMessage.textContent = 'Status: Manual coordinates saved successfully';
+      statusMessage.style.color = 'green';
+
+      // Reset to normal status after 2 seconds
+      setTimeout(() => {
+        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+      }, 2000);
+
+      // Also save to server if possible
+      fetch('http://localhost:3000/mouse/save-position', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: 'cloudflareCheckbox',
+          position: position
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Saved manual coordinates to server:', data);
+      })
+      .catch(error => {
+        console.error('Error saving manual coordinates to server:', error);
+        // This is non-critical, so we don't show an error message to the user
+      });
+    });
   });
 
   // Save credentials button

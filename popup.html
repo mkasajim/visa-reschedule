@@ -233,6 +233,23 @@
     </button>
     <div id="currentMousePosition" style="margin-top: 10px; font-size: 12px; display: none;">Current position: X=0, Y=0</div>
     <div id="savedPositionInfo" style="margin-top: 10px; font-size: 12px;"></div>
+
+    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+      <h4 style="margin-top: 0; margin-bottom: 10px;">Manual Coordinate Entry</h4>
+      <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+        <div style="flex: 1;">
+          <label for="manualXCoord" style="display: block; font-size: 12px; margin-bottom: 5px;">X Coordinate:</label>
+          <input type="number" id="manualXCoord" style="width: 100%; padding: 5px; box-sizing: border-box;">
+        </div>
+        <div style="flex: 1;">
+          <label for="manualYCoord" style="display: block; font-size: 12px; margin-bottom: 5px;">Y Coordinate:</label>
+          <input type="number" id="manualYCoord" style="width: 100%; padding: 5px; box-sizing: border-box;">
+        </div>
+      </div>
+      <button id="saveManualCoordinates" style="background-color: #4CAF50; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+        Save Manual Coordinates
+      </button>
+    </div>
   </div>
 
   <div class="date-range-container">

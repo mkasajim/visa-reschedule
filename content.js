@@ -113,13 +113,43 @@ initCloudflareObserver();
 
 // Function to check if we're on the "Verify you are a human" page
 function isOnHumanVerificationPage() {
-  // Look for the specific checkbox label for human verification
-  const verifyHumanLabel = document.querySelector('.cb-lb span.cb-lb-t');
-  const verifyHumanText = verifyHumanLabel ? verifyHumanLabel.textContent.trim() : '';
-  const isVerifyHumanPage = verifyHumanText === 'Verify you are human';
+  // Look for various indicators of the human verification page
 
+  // Method 1: Check for the specific heading text
+  const headings = document.querySelectorAll('h1, h2, p.h2, .h2');
+  let foundVerifyText = false;
+  let verifyTextElement = null;
+
+  for (const heading of headings) {
+    const headingText = heading.textContent.trim();
+    if (headingText.includes('Verify you are human')) {
+      foundVerifyText = true;
+      verifyTextElement = heading;
+      break;
+    }
+  }
+
+  // Method 2: Check for Cloudflare challenge elements
+  const hasCloudflareChallengeScript = document.querySelector('script[src*="challenge-platform"]') !== null;
+  const hasChallengeContent = document.querySelector('.main-content') !== null && document.querySelector('.footer-inner') !== null;
+  const hasTurnstileInput = document.querySelector('input[name="cf-turnstile-response"]') !== null;
+
+  // Method 3: Check for the checkbox
+  const hasVerifyCheckbox = document.querySelector('.cb-lb input[type="checkbox"]') !== null;
+
+  // Log all the indicators
   debugLog('Checking for human verification page:');
-  debugLog('- Has "Verify you are human" label: ' + (isVerifyHumanPage ? 'Yes' : 'No'));
+  debugLog('- Has "Verify you are human" text: ' + (foundVerifyText ? 'Yes' : 'No'));
+  if (foundVerifyText && verifyTextElement) {
+    debugLog('  Text found: "' + verifyTextElement.textContent.trim() + '"');
+  }
+  debugLog('- Has Cloudflare challenge script: ' + (hasCloudflareChallengeScript ? 'Yes' : 'No'));
+  debugLog('- Has challenge content structure: ' + (hasChallengeContent ? 'Yes' : 'No'));
+  debugLog('- Has turnstile input: ' + (hasTurnstileInput ? 'Yes' : 'No'));
+  debugLog('- Has verify checkbox: ' + (hasVerifyCheckbox ? 'Yes' : 'No'));
+
+  // Determine if this is a verification page based on the indicators
+  const isVerifyHumanPage = foundVerifyText || (hasCloudflareChallengeScript && hasChallengeContent) || hasTurnstileInput;
 
   if (isVerifyHumanPage) {
     debugLog('✅ Detected "Verify you are human" page');
@@ -157,15 +187,92 @@ function handleHumanVerificationPage() {
 
 // Function to click the human verification checkbox
 function clickHumanVerificationCheckbox() {
-  // Look for the checkbox using the specific selector
-  const checkbox = document.querySelector('.cb-lb input[type="checkbox"]');
+  // Try multiple selectors to find the checkbox
+  const selectors = [
+    // Original selector
+    '.cb-lb input[type="checkbox"]',
+    // Cloudflare turnstile selectors
+    'input[name="cf-turnstile-response"]',
+    '#cf-chl-widget-667ql_response',
+    'input[type="checkbox"][id*="cf-"]',
+    // Generic checkbox selectors that might be related to verification
+    'input[type="checkbox"]',
+    // Iframe selectors (in case the checkbox is in an iframe)
+    'iframe[src*="cloudflare"]',
+    'iframe[src*="turnstile"]',
+    'iframe[title*="challenge"]'
+  ];
 
-  if (checkbox && !checkbox.checked) {
-    debugLog('Found human verification checkbox, clicking it');
+  // Try each selector
+  let foundElement = null;
+  let isIframe = false;
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      foundElement = element;
+      isIframe = element.tagName.toLowerCase() === 'iframe';
+      debugLog(`Found element with selector: ${selector}`, {
+        tagName: element.tagName,
+        type: element.type,
+        id: element.id,
+        isIframe: isIframe
+      });
+      break;
+    }
+  }
+
+  if (!foundElement) {
+    debugLog('Could not find any verification element to interact with');
+
+    // As a last resort, try to find any clickable element in the challenge area
+    const challengeArea = document.querySelector('.main-content') || document.body;
+    const clickableElements = challengeArea.querySelectorAll('button, input, a, [role="button"]');
+
+    if (clickableElements.length > 0) {
+      debugLog(`Found ${clickableElements.length} potential clickable elements in challenge area`);
+      foundElement = clickableElements[0];
+    } else {
+      // If we still can't find anything, try to trigger the Cloudflare challenge manually
+      debugLog('Attempting to trigger Cloudflare challenge manually');
+      triggerCloudflareChallenge();
+      return;
+    }
+  }
+
+  // Handle iframe case differently
+  if (isIframe) {
+    debugLog('Found iframe, attempting to interact with its content');
+    try {
+      // Try to focus the iframe first
+      foundElement.focus();
+      showNotification('🔍 Focusing on verification iframe...', 3000);
+
+      // Try to click in the center of the iframe
+      const rect = foundElement.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Create a click event at the center of the iframe
+      simulateClickAt(centerX, centerY);
+
+      debugLog('Clicked in the center of the iframe');
+    } catch (error) {
+      debugLog('Error interacting with iframe:', { error: error.toString() });
+    }
+    return;
+  }
+
+  // For regular elements, proceed with clicking
+  if (foundElement) {
+    debugLog('Found verification element, clicking it');
 
     // Simulate a more human-like click with a slight delay
     setTimeout(() => {
       try {
+        // Scroll the element into view first
+        foundElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
         // Create and dispatch mouse events to simulate human interaction
         // First move to the element
         const moveEvent = new MouseEvent('mouseover', {
@@ -173,36 +280,104 @@ function clickHumanVerificationCheckbox() {
           cancelable: true,
           view: window
         });
-        checkbox.dispatchEvent(moveEvent);
+        foundElement.dispatchEvent(moveEvent);
 
         // Then click after a small delay
         setTimeout(() => {
-          const clickEvent = new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            view: window
-          });
-          checkbox.dispatchEvent(clickEvent);
+          // For checkbox type inputs
+          if (foundElement.type === 'checkbox' && !foundElement.checked) {
+            const clickEvent = new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            foundElement.dispatchEvent(clickEvent);
 
-          // Show notification only if the click was successful
-          if (checkbox.checked) {
-            showNotification('✅ Human verification checkbox clicked automatically', 3000);
-            debugLog('Successfully clicked human verification checkbox');
-          } else {
-            // If direct event dispatch didn't work, try the regular click
-            checkbox.click();
-            if (checkbox.checked) {
+            // Show notification only if the click was successful
+            if (foundElement.checked) {
               showNotification('✅ Human verification checkbox clicked automatically', 3000);
-              debugLog('Successfully clicked human verification checkbox (fallback method)');
+              debugLog('Successfully clicked human verification checkbox');
             } else {
-              debugLog('Failed to check the human verification checkbox');
+              // If direct event dispatch didn't work, try the regular click
+              foundElement.click();
+              showNotification('✅ Attempted to click human verification element', 3000);
+              debugLog('Attempted to click human verification element (fallback method)');
+            }
+          } else {
+            // For non-checkbox elements or hidden inputs
+            try {
+              // Try to focus and click
+              foundElement.focus();
+              foundElement.click();
+
+              // For turnstile inputs, we might need to trigger their events
+              if (foundElement.name === 'cf-turnstile-response') {
+                // Try to trigger the turnstile
+                triggerCloudflareChallenge();
+              }
+
+              showNotification('✅ Interacted with verification element', 3000);
+              debugLog('Successfully interacted with verification element');
+            } catch (error) {
+              debugLog('Error clicking verification element:', { error: error.toString() });
             }
           }
         }, 150); // Small delay between mouseover and click
       } catch (error) {
-        debugLog('Error clicking human verification checkbox:', { error: error.toString() });
+        debugLog('Error interacting with verification element:', { error: error.toString() });
       }
     }, 100 + Math.random() * 200); // Random delay between 100-300ms to seem more human-like
+  }
+}
+
+// Function to simulate a click at specific coordinates
+function simulateClickAt(x, y) {
+  const clickEvent = new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX: x,
+    clientY: y
+  });
+
+  document.elementFromPoint(x, y)?.dispatchEvent(clickEvent) || document.body.dispatchEvent(clickEvent);
+  debugLog(`Simulated click at coordinates (${x}, ${y})`);
+}
+
+// Function to try to trigger the Cloudflare challenge manually
+function triggerCloudflareChallenge() {
+  debugLog('Attempting to trigger Cloudflare challenge manually');
+
+  // Look for the Cloudflare script
+  const cfScript = document.querySelector('script[src*="challenge-platform"]');
+  if (cfScript) {
+    debugLog('Found Cloudflare challenge script, attempting to reload it');
+
+    // Create a new script element
+    const newScript = document.createElement('script');
+    newScript.src = cfScript.src;
+
+    // Remove the old script and add the new one
+    if (cfScript.parentNode) {
+      cfScript.parentNode.removeChild(cfScript);
+      document.head.appendChild(newScript);
+      showNotification('🔄 Attempting to trigger Cloudflare verification...', 3000);
+    }
+  } else {
+    // If we can't find the script, try to click any visible button
+    const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
+    const visibleButtons = buttons.filter(button => {
+      const style = window.getComputedStyle(button);
+      return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+    });
+
+    if (visibleButtons.length > 0) {
+      debugLog(`Found ${visibleButtons.length} visible buttons, clicking the first one`);
+      visibleButtons[0].click();
+      showNotification('🔄 Clicked a button to trigger verification', 3000);
+    } else {
+      debugLog('Could not find any way to trigger the Cloudflare challenge');
+    }
   }
 }
 
@@ -2166,12 +2341,8 @@ function checkForCloudflareCheckbox() {
       // Add more selectors if needed
     ];
 
-    // Check if we're on the "Verify you are human" page
-    const verifyHumanLabel = document.querySelector('.cb-lb span.cb-lb-t');
-    const verifyHumanText = verifyHumanLabel ? verifyHumanLabel.textContent.trim() : '';
-    const isVerifyHumanPage = verifyHumanText === 'Verify you are human';
-
-    if (isVerifyHumanPage) {
+    // Check if we're on the "Verify you are human" page using our improved detection
+    if (isOnHumanVerificationPage()) {
       // If we're on the human verification page, also check if we need to handle it
       if (!window._humanVerificationHandled) {
         debugLog('Detected "Verify you are human" page via Cloudflare observer');

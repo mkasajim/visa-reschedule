@@ -79,6 +79,12 @@ injectCustomStyles();
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action === 'performLogin') {
     debugLog('Login action received');
+    // Check if we're on the sign in failed page
+    if (isOnSignInFailedPage()) {
+      debugLog('On sign in failed page, handling it');
+      handleSignInFailedPage();
+      return;
+    }
     // Check if we're already logged in
     if (!isOnLoginPage()) {
       debugLog('Already logged in or not on login page');
@@ -1056,6 +1062,57 @@ function triggerCloudflareChallenge() {
 }
 
 // Function to check the current page and handle accordingly
+// Function to check if we're on the sign in failed page
+function isOnSignInFailedPage() {
+  // Check for the alert with "Sign in failed" message
+  const alertElement = document.querySelector('.alert.alert-danger');
+  const signInFailedText = alertElement ? alertElement.textContent.trim() : '';
+  const hasSignInFailedText = signInFailedText.includes('Sign in failed');
+
+  // Check for the sign in button
+  const signInButton = document.querySelector('a.btn.btn-primary[title="Sign in"]');
+
+  debugLog('Checking for sign in failed page:');
+  debugLog('- Has alert with "Sign in failed" text: ' + (hasSignInFailedText ? 'Yes' : 'No'));
+  debugLog('- Has sign in button: ' + (signInButton ? 'Yes' : 'No'));
+
+  if (hasSignInFailedText && signInButton) {
+    debugLog('✅ Detected "Sign in failed" page');
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// Function to handle the sign in failed page
+function handleSignInFailedPage() {
+  debugLog('Handling "Sign in failed" page');
+  showNotification('🔍 Detected "Sign in failed" page, clicking sign in button...');
+
+  // Find the sign in button
+  const signInButton = document.querySelector('a.btn.btn-primary[title="Sign in"]');
+
+  if (signInButton) {
+    // Click with a slight delay to ensure the notification is visible
+    setTimeout(() => {
+      try {
+        signInButton.click();
+        debugLog('Successfully clicked sign in button');
+      } catch (error) {
+        debugLog('Error clicking sign in button:', { error: error.toString() });
+        // Try direct navigation as fallback if href is available
+        if (signInButton.href) {
+          window.location.href = signInButton.href;
+          debugLog('Navigating directly to sign in URL');
+        }
+      }
+    }, 1500);
+  } else {
+    debugLog('Could not find sign in button', { error: true });
+    showNotification('⚠️ Could not find sign in button to click', 8000);
+  }
+}
+
 function checkAndHandlePage() {
   // Give the page some time to fully load
   setTimeout(() => {
@@ -1065,6 +1122,9 @@ function checkAndHandlePage() {
         if (isOnHumanVerificationPage()) {
           debugLog('On "Verify you are human" page, handling verification');
           handleHumanVerificationPage();
+        } else if (isOnSignInFailedPage()) {
+          debugLog('On "Sign in failed" page, handling sign in');
+          handleSignInFailedPage();
         } else if (isOnLoginPage()) {
           debugLog('On login page, performing login');
           performLogin();

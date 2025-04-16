@@ -1,8 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
+const robot = require('robotjs');
 
 const app = express();
 app.use(cors());
@@ -11,6 +13,12 @@ app.use(express.json({ limit: '10mb' }));
 const PORT = 3000;
 const TEMP_DIR = path.join(__dirname, 'temp');
 const MAX_RETRIES = 3; // Maximum number of retries for captcha solving
+
+// File to store saved mouse positions
+const POSITIONS_FILE = path.join(__dirname, 'saved-positions.json');
+
+// Store saved positions
+let savedPositions = {};
 
 /**
  * Refines captcha text to ensure it only contains uppercase letters and numbers
@@ -263,9 +271,162 @@ app.post('/save-captcha', async (req, res) => {
     }
 });
 
+// Load saved positions from file if it exists
+function loadSavedPositions() {
+    try {
+        if (fsSync.existsSync(POSITIONS_FILE)) {
+            const data = fsSync.readFileSync(POSITIONS_FILE, 'utf8');
+            savedPositions = JSON.parse(data);
+            console.log('Loaded saved positions:', savedPositions);
+        }
+    } catch (err) {
+        console.error('Error loading saved positions:', err);
+    }
+}
+
+// Save positions to file
+function savePositionsToFile() {
+    try {
+        fsSync.writeFileSync(POSITIONS_FILE, JSON.stringify(savedPositions, null, 2));
+        console.log('Saved positions to file');
+    } catch (err) {
+        console.error('Error saving positions to file:', err);
+    }
+}
+
+// Mouse automation endpoints
+
+// Endpoint to get current mouse position
+app.get('/mouse/position', (req, res) => {
+    const mousePos = robot.getMousePos();
+    console.log('Current mouse position:', mousePos);
+    res.json(mousePos);
+});
+
+// Endpoint to save a position with a name
+app.post('/mouse/save-position', (req, res) => {
+    const { name } = req.body;
+
+    if (!name) {
+        return res.status(400).json({ error: 'Position name is required' });
+    }
+
+    const mousePos = robot.getMousePos();
+    savedPositions[name] = mousePos;
+    savePositionsToFile();
+
+    console.log(`Saved position "${name}":`, mousePos);
+    res.json({ success: true, position: mousePos });
+});
+
+// Endpoint to get all saved positions
+app.get('/mouse/saved-positions', (req, res) => {
+    res.json(savedPositions);
+});
+
+// Endpoint to click at a saved position
+app.post('/mouse/click-saved', (req, res) => {
+    const { name, button = 'left', double = false } = req.body;
+
+    if (!name) {
+        return res.status(400).json({ error: 'Position name is required' });
+    }
+
+    const position = savedPositions[name];
+    if (!position) {
+        return res.status(404).json({ error: `No saved position with name "${name}"` });
+    }
+
+    // Save current mouse position to restore later
+    const currentPos = robot.getMousePos();
+
+    // Move to the saved position
+    robot.moveMouse(position.x, position.y);
+
+    // Perform the click
+    if (double) {
+        robot.mouseClick(button);
+        setTimeout(() => {
+            robot.mouseClick(button);
+        }, 100);
+    } else {
+        robot.mouseClick(button);
+    }
+
+    console.log(`Clicked at saved position "${name}":`, position);
+
+    // Optional: Move mouse back to original position
+    setTimeout(() => {
+        robot.moveMouse(currentPos.x, currentPos.y);
+    }, 200);
+
+    res.json({ success: true });
+});
+
+// Endpoint to click at a specific position
+app.post('/mouse/click', (req, res) => {
+    const { x, y, button = 'left', double = false } = req.body;
+
+    if (x === undefined || y === undefined) {
+        return res.status(400).json({ error: 'Coordinates (x, y) are required' });
+    }
+
+    // Save current mouse position to restore later
+    const currentPos = robot.getMousePos();
+
+    // Move to the specified position
+    robot.moveMouse(x, y);
+
+    // Perform the click
+    if (double) {
+        robot.mouseClick(button);
+        setTimeout(() => {
+            robot.mouseClick(button);
+        }, 100);
+    } else {
+        robot.mouseClick(button);
+    }
+
+    console.log(`Clicked at position (${x}, ${y})`);
+
+    // Optional: Move mouse back to original position
+    setTimeout(() => {
+        robot.moveMouse(currentPos.x, currentPos.y);
+    }, 200);
+
+    res.json({ success: true });
+});
+
+// Endpoint to delete a saved position
+app.delete('/mouse/position/:name', (req, res) => {
+    const { name } = req.params;
+
+    if (!savedPositions[name]) {
+        return res.status(404).json({ error: `No saved position with name "${name}"` });
+    }
+
+    delete savedPositions[name];
+    savePositionsToFile();
+
+    console.log(`Deleted saved position "${name}"`);
+    res.json({ success: true });
+});
+
 // Start server
 ensureTempDir().then(() => {
+    // Load saved positions
+    loadSavedPositions();
+
     app.listen(PORT, () => {
         console.log(`Server running on http://localhost:${PORT}`);
+        console.log('Available endpoints:');
+        console.log('- POST /solve-captcha - Solve captcha with Gemini');
+        console.log('- POST /save-captcha - Save captcha image for debugging');
+        console.log('- GET /mouse/position - Get current mouse position');
+        console.log('- POST /mouse/save-position - Save current position with a name');
+        console.log('- GET /mouse/saved-positions - Get all saved positions');
+        console.log('- POST /mouse/click-saved - Click at a saved position');
+        console.log('- POST /mouse/click - Click at specific coordinates');
+        console.log('- DELETE /mouse/position/:name - Delete a saved position');
     });
 });

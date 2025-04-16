@@ -215,6 +215,25 @@
     <span class="toggle-label">Auto-click Cloudflare Checkbox</span>
   </div>
 
+  <div class="toggle-container">
+    <label class="switch">
+      <input type="checkbox" id="useNativeMouseAutomationToggle">
+      <span class="slider"></span>
+    </label>
+    <span class="toggle-label">Use Native Mouse Automation</span>
+  </div>
+
+  <div id="nativeMouseAutomationControls" style="margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; display: none;">
+    <h4 style="margin-top: 0; margin-bottom: 10px;">Native Mouse Automation</h4>
+    <p style="font-size: 12px; margin-bottom: 10px;">
+      Position your mouse over the Cloudflare checkbox and click the button below to save the position.
+    </p>
+    <button id="saveCloudflareCheckboxPosition" style="background-color: #2196F3; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+      Save Current Mouse Position
+    </button>
+    <div id="savedPositionInfo" style="margin-top: 10px; font-size: 12px;"></div>
+  </div>
+
   <div class="date-range-container">
     <h3>Desired Appointment Date Range</h3>
     <div class="date-input-group">

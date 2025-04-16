@@ -167,14 +167,37 @@ function handleHumanVerificationPage() {
   debugLog('Handling "Verify you are human" page');
   showNotification('🔍 Detected "Verify you are human" page, clicking checkbox...');
 
-  // Click the checkbox immediately
-  clickHumanVerificationCheckbox();
+  // First try to use the native mouse automation server if enabled
+  chrome.storage.local.get(['useNativeMouseAutomation', 'cloudflareCheckboxPosition'], (result) => {
+    const useNativeMouseAutomation = result.useNativeMouseAutomation !== undefined ? result.useNativeMouseAutomation : false;
+    const cloudflareCheckboxPosition = result.cloudflareCheckboxPosition || null;
+
+    if (useNativeMouseAutomation && cloudflareCheckboxPosition) {
+      debugLog('Using native mouse automation to click at saved position');
+      clickWithNativeMouseAutomation('cloudflareCheckbox');
+    } else {
+      // Fall back to browser-based automation
+      debugLog('Native mouse automation disabled or position not saved, using browser-based automation');
+      clickHumanVerificationCheckbox();
+    }
+  });
 
   // Also set up periodic checking for the checkbox
   // This helps if the page refreshes or if the checkbox wasn't clickable initially
   if (!window._humanVerificationInterval) {
     window._humanVerificationInterval = setInterval(() => {
-      clickHumanVerificationCheckbox();
+      chrome.storage.local.get(['useNativeMouseAutomation', 'cloudflareCheckboxPosition'], (result) => {
+        const useNativeMouseAutomation = result.useNativeMouseAutomation !== undefined ? result.useNativeMouseAutomation : false;
+        const cloudflareCheckboxPosition = result.cloudflareCheckboxPosition || null;
+
+        if (useNativeMouseAutomation && cloudflareCheckboxPosition) {
+          debugLog('Using native mouse automation to click at saved position (periodic)');
+          clickWithNativeMouseAutomation('cloudflareCheckbox');
+        } else {
+          // Fall back to browser-based automation
+          clickHumanVerificationCheckbox();
+        }
+      });
     }, 2000); // Check every 2 seconds
 
     // Clear the interval after 30 seconds to avoid indefinite checking
@@ -807,95 +830,188 @@ function simulateClickAt(x, y) {
   debugLog(`Simulated click at coordinates (${x}, ${y})`);
 }
 
+// Function to click using the native mouse automation server
+function clickWithNativeMouseAutomation(positionName) {
+  // Default server URL
+  const serverUrl = 'http://localhost:3000';
+
+  debugLog(`Attempting to click at saved position "${positionName}" using native mouse automation`);
+
+  // Make a request to the server to click at the saved position
+  fetch(`${serverUrl}/mouse/click-saved`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: positionName,
+      button: 'left',
+      double: false
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      debugLog(`Successfully clicked at saved position "${positionName}" using native mouse automation`);
+      showNotification(`✅ Clicked at position "${positionName}" using native mouse automation`, 3000);
+    } else {
+      debugLog(`Error clicking at saved position "${positionName}": ${data.error}`);
+      showNotification(`❌ Error clicking at position "${positionName}": ${data.error}`, 3000);
+
+      // Fall back to browser-based automation
+      debugLog('Falling back to browser-based automation');
+      clickHumanVerificationCheckbox();
+    }
+  })
+  .catch(error => {
+    debugLog(`Error communicating with mouse automation server: ${error.toString()}`);
+    showNotification(`❌ Error communicating with mouse automation server: ${error.toString()}`, 3000);
+
+    // Fall back to browser-based automation
+    debugLog('Falling back to browser-based automation');
+    clickHumanVerificationCheckbox();
+  });
+}
+
+// Function to save current mouse position with a name
+function saveCurrentMousePosition(positionName) {
+  // Default server URL
+  const serverUrl = 'http://localhost:3000';
+
+  debugLog(`Attempting to save current mouse position as "${positionName}"`);
+
+  // Make a request to the server to save the current mouse position
+  fetch(`${serverUrl}/mouse/save-position`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: positionName
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      debugLog(`Successfully saved mouse position as "${positionName}": ${JSON.stringify(data.position)}`);
+      showNotification(`✅ Saved mouse position as "${positionName}"`, 3000);
+
+      // Save the position name in Chrome storage
+      if (positionName === 'cloudflareCheckbox') {
+        chrome.storage.local.set({ cloudflareCheckboxPosition: data.position });
+      }
+    } else {
+      debugLog(`Error saving mouse position as "${positionName}": ${data.error}`);
+      showNotification(`❌ Error saving mouse position as "${positionName}": ${data.error}`, 3000);
+    }
+  })
+  .catch(error => {
+    debugLog(`Error communicating with mouse automation server: ${error.toString()}`);
+    showNotification(`❌ Error communicating with mouse automation server: ${error.toString()}`, 3000);
+  });
+}
+
 // Function to try to trigger the Cloudflare challenge manually
 function triggerCloudflareChallenge() {
   debugLog('Attempting to trigger Cloudflare challenge manually');
 
-  // Method 1: Try to reload the Cloudflare script
-  const cfScript = document.querySelector('script[src*="challenge-platform"]');
-  if (cfScript) {
-    debugLog('Found Cloudflare challenge script, attempting to reload it');
+  // First try to use native mouse automation if enabled
+  chrome.storage.local.get(['useNativeMouseAutomation', 'cloudflareCheckboxPosition'], (result) => {
+    const useNativeMouseAutomation = result.useNativeMouseAutomation !== undefined ? result.useNativeMouseAutomation : false;
+    const cloudflareCheckboxPosition = result.cloudflareCheckboxPosition || null;
 
-    // Create a new script element
-    const newScript = document.createElement('script');
-    newScript.src = cfScript.src;
-
-    // Remove the old script and add the new one
-    if (cfScript.parentNode) {
-      cfScript.parentNode.removeChild(cfScript);
-      document.head.appendChild(newScript);
-      showNotification('🔄 Attempting to trigger Cloudflare verification...', 3000);
-      return true;
+    if (useNativeMouseAutomation && cloudflareCheckboxPosition) {
+      debugLog('Using native mouse automation to click at saved position');
+      clickWithNativeMouseAutomation('cloudflareCheckbox');
+      return;
     }
-  }
 
-  // Method 2: Try to find and trigger the turnstile widget
-  const turnstileWidgets = document.querySelectorAll('[id^="turnstile_"], [class*="turnstile"], [id*="cf-"]');
-  if (turnstileWidgets.length > 0) {
-    debugLog(`Found ${turnstileWidgets.length} potential turnstile widgets`);
+    // Fall back to browser-based methods
+    // Method 1: Try to reload the Cloudflare script
+    const cfScript = document.querySelector('script[src*="challenge-platform"]');
+    if (cfScript) {
+      debugLog('Found Cloudflare challenge script, attempting to reload it');
 
-    // Try to trigger the turnstile by dispatching events
-    turnstileWidgets.forEach((widget, index) => {
-      try {
-        // Try to focus and click
-        widget.focus();
-        widget.click();
+      // Create a new script element
+      const newScript = document.createElement('script');
+      newScript.src = cfScript.src;
 
-        // Try to dispatch custom events that might trigger the widget
-        const event = new CustomEvent('turnstile:ready');
-        widget.dispatchEvent(event);
-
-        debugLog(`Triggered events on turnstile widget ${index + 1}`);
-      } catch (error) {
-        debugLog(`Error triggering turnstile widget ${index + 1}:`, { error: error.toString() });
+      // Remove the old script and add the new one
+      if (cfScript.parentNode) {
+        cfScript.parentNode.removeChild(cfScript);
+        document.head.appendChild(newScript);
+        showNotification('🔄 Attempting to trigger Cloudflare verification...', 3000);
+        return;
       }
+    }
+
+    // Method 2: Try to find and trigger the turnstile widget
+    const turnstileWidgets = document.querySelectorAll('[id^="turnstile_"], [class*="turnstile"], [id*="cf-"]');
+    if (turnstileWidgets.length > 0) {
+      debugLog(`Found ${turnstileWidgets.length} potential turnstile widgets`);
+
+      // Try to trigger the turnstile by dispatching events
+      turnstileWidgets.forEach((widget, index) => {
+        try {
+          // Try to focus and click
+          widget.focus();
+          widget.click();
+
+          // Try to dispatch custom events that might trigger the widget
+          const event = new CustomEvent('turnstile:ready');
+          widget.dispatchEvent(event);
+
+          debugLog(`Triggered events on turnstile widget ${index + 1}`);
+        } catch (error) {
+          debugLog(`Error triggering turnstile widget ${index + 1}:`, { error: error.toString() });
+        }
+      });
+
+      showNotification('🔄 Attempted to trigger Cloudflare turnstile', 3000);
+      return;
+    }
+
+    // Method 3: Try to click any visible button
+    const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
+    const visibleButtons = buttons.filter(button => {
+      const style = window.getComputedStyle(button);
+      return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
     });
 
-    showNotification('🔄 Attempted to trigger Cloudflare turnstile', 3000);
-    return true;
-  }
-
-  // Method 3: Try to click any visible button
-  const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
-  const visibleButtons = buttons.filter(button => {
-    const style = window.getComputedStyle(button);
-    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-  });
-
-  if (visibleButtons.length > 0) {
-    debugLog(`Found ${visibleButtons.length} visible buttons, clicking the first one`);
-    visibleButtons[0].click();
-    showNotification('🔄 Clicked a button to trigger verification', 3000);
-    return true;
-  }
-
-  // Method 4: Try to reload the page
-  debugLog('All methods failed, considering page reload');
-
-  // Check if we've already tried reloading
-  if (!window._triedReloadingForCloudflare) {
-    window._triedReloadingForCloudflare = true;
-
-    // Set a flag in session storage to indicate we've tried reloading
-    try {
-      sessionStorage.setItem('_cloudflareReloadAttempt', 'true');
-    } catch (e) {
-      // Session storage might not be available
+    if (visibleButtons.length > 0) {
+      debugLog(`Found ${visibleButtons.length} visible buttons, clicking the first one`);
+      visibleButtons[0].click();
+      showNotification('🔄 Clicked a button to trigger verification', 3000);
+      return;
     }
 
-    // Show notification before reload
-    showNotification('🔄 Attempting to reload page to trigger verification...', 5000);
+    // Method 4: Try to reload the page
+    debugLog('All methods failed, considering page reload');
 
-    // Set a timeout to reload the page
-    setTimeout(() => {
-      window.location.reload();
-    }, 5000);
+    // Check if we've already tried reloading
+    if (!window._triedReloadingForCloudflare) {
+      window._triedReloadingForCloudflare = true;
 
-    return true;
-  }
+      // Set a flag in session storage to indicate we've tried reloading
+      try {
+        sessionStorage.setItem('_cloudflareReloadAttempt', 'true');
+      } catch (e) {
+        // Session storage might not be available
+      }
 
-  debugLog('Could not find any way to trigger the Cloudflare challenge');
-  return false;
+      // Show notification before reload
+      showNotification('🔄 Attempting to reload page to trigger verification...', 5000);
+
+      // Set a timeout to reload the page
+      setTimeout(() => {
+        window.location.reload();
+      }, 5000);
+
+      return;
+    }
+
+    debugLog('Could not find any way to trigger the Cloudflare challenge');
+  });
 }
 
 // Function to check the current page and handle accordingly

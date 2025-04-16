@@ -4,6 +4,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const autoRescheduleToggle = document.getElementById('autoRescheduleToggle');
   const autoSubmitToggle = document.getElementById('autoSubmitToggle');
   const autoCloudflareToggle = document.getElementById('autoCloudflareToggle');
+  const useNativeMouseAutomationToggle = document.getElementById('useNativeMouseAutomationToggle');
+  const nativeMouseAutomationControls = document.getElementById('nativeMouseAutomationControls');
+  const saveCloudflareCheckboxPosition = document.getElementById('saveCloudflareCheckboxPosition');
+  const savedPositionInfo = document.getElementById('savedPositionInfo');
   const statusMessage = document.getElementById('statusMessage');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
@@ -34,6 +38,8 @@ document.addEventListener('DOMContentLoaded', function() {
       'autoRescheduleEnabled',
       'autoSubmitEnabled',
       'autoCloudflareEnabled',
+      'useNativeMouseAutomation',
+      'cloudflareCheckboxPosition',
       'username',
       'password',
       'enableGemini',
@@ -49,6 +55,17 @@ document.addEventListener('DOMContentLoaded', function() {
       autoRescheduleToggle.checked = result.autoRescheduleEnabled || false;
       autoSubmitToggle.checked = result.autoSubmitEnabled || false;
       autoCloudflareToggle.checked = result.autoCloudflareEnabled || false;
+      useNativeMouseAutomationToggle.checked = result.useNativeMouseAutomation || false;
+
+      // Show/hide native mouse automation controls
+      nativeMouseAutomationControls.style.display = result.useNativeMouseAutomation ? 'block' : 'none';
+
+      // Update saved position info
+      if (result.cloudflareCheckboxPosition) {
+        savedPositionInfo.textContent = `Saved position: X=${result.cloudflareCheckboxPosition.x}, Y=${result.cloudflareCheckboxPosition.y}`;
+      } else {
+        savedPositionInfo.textContent = 'No position saved yet';
+      }
 
       // Set saved credentials
       usernameInput.value = result.username || '';
@@ -159,6 +176,78 @@ document.addEventListener('DOMContentLoaded', function() {
       setTimeout(() => {
         updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
       }, 2000);
+    });
+  });
+
+  // Toggle event listener for native mouse automation
+  useNativeMouseAutomationToggle.addEventListener('change', function() {
+    const isNativeMouseAutomationEnabled = useNativeMouseAutomationToggle.checked;
+
+    // Show/hide native mouse automation controls
+    nativeMouseAutomationControls.style.display = isNativeMouseAutomationEnabled ? 'block' : 'none';
+
+    // Save to storage
+    chrome.storage.local.set({ useNativeMouseAutomation: isNativeMouseAutomationEnabled }, function() {
+      // Update status message
+      statusMessage.textContent = `Status: Native Mouse Automation ${isNativeMouseAutomationEnabled ? 'Enabled' : 'Disabled'}`;
+      statusMessage.style.color = '#2196F3';
+
+      // Reset to normal status after 2 seconds
+      setTimeout(() => {
+        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+      }, 2000);
+    });
+  });
+
+  // Save Cloudflare checkbox position button
+  saveCloudflareCheckboxPosition.addEventListener('click', function() {
+    // Make a request to the server to save the current mouse position
+    fetch('http://localhost:3000/mouse/save-position', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: 'cloudflareCheckbox'
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Save the position in Chrome storage
+        chrome.storage.local.set({ cloudflareCheckboxPosition: data.position }, function() {
+          // Update saved position info
+          savedPositionInfo.textContent = `Saved position: X=${data.position.x}, Y=${data.position.y}`;
+
+          // Update status message
+          statusMessage.textContent = 'Status: Cloudflare checkbox position saved successfully';
+          statusMessage.style.color = 'green';
+
+          // Reset to normal status after 2 seconds
+          setTimeout(() => {
+            updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+          }, 2000);
+        });
+      } else {
+        // Show error message
+        statusMessage.textContent = `Status: Error saving position - ${data.error}`;
+        statusMessage.style.color = 'red';
+
+        // Reset to normal status after 3 seconds
+        setTimeout(() => {
+          updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+        }, 3000);
+      }
+    })
+    .catch(error => {
+      // Show error message
+      statusMessage.textContent = `Status: Error communicating with server - ${error.message}`;
+      statusMessage.style.color = 'red';
+
+      // Reset to normal status after 3 seconds
+      setTimeout(() => {
+        updateStatusMessage(autoLoginToggle.checked, autoRescheduleToggle.checked);
+      }, 3000);
     });
   });
 
@@ -360,6 +449,15 @@ document.addEventListener('DOMContentLoaded', function() {
           if (settings.autoRescheduleEnabled !== undefined) autoRescheduleToggle.checked = settings.autoRescheduleEnabled;
           if (settings.autoSubmitEnabled !== undefined) autoSubmitToggle.checked = settings.autoSubmitEnabled;
           if (settings.autoCloudflareEnabled !== undefined) autoCloudflareToggle.checked = settings.autoCloudflareEnabled;
+          if (settings.useNativeMouseAutomation !== undefined) {
+            useNativeMouseAutomationToggle.checked = settings.useNativeMouseAutomation;
+            nativeMouseAutomationControls.style.display = settings.useNativeMouseAutomation ? 'block' : 'none';
+          }
+
+          // Update saved position info if it exists
+          if (settings.cloudflareCheckboxPosition) {
+            savedPositionInfo.textContent = `Saved position: X=${settings.cloudflareCheckboxPosition.x}, Y=${settings.cloudflareCheckboxPosition.y}`;
+          }
 
           if (settings.startDate) startDateInput.value = settings.startDate;
           if (settings.endDate) endDateInput.value = settings.endDate;

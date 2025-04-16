@@ -108,6 +108,101 @@ checkAndHandlePage();
 // Initialize Cloudflare observer
 initCloudflareObserver();
 
+// Function to check if we're on the "Verify you are a human" page
+function isOnHumanVerificationPage() {
+  // Look for the specific checkbox label for human verification
+  const verifyHumanLabel = document.querySelector('.cb-lb span.cb-lb-t');
+  const verifyHumanText = verifyHumanLabel ? verifyHumanLabel.textContent.trim() : '';
+  const isVerifyHumanPage = verifyHumanText === 'Verify you are human';
+
+  debugLog('Checking for human verification page:');
+  debugLog('- Has "Verify you are human" label: ' + (isVerifyHumanPage ? 'Yes' : 'No'));
+
+  if (isVerifyHumanPage) {
+    debugLog('✅ Detected "Verify you are human" page');
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// Function to handle the "Verify you are human" page
+function handleHumanVerificationPage() {
+  debugLog('Handling "Verify you are human" page');
+  showNotification('🔍 Detected "Verify you are human" page, clicking checkbox...');
+
+  // Click the checkbox immediately
+  clickHumanVerificationCheckbox();
+
+  // Also set up periodic checking for the checkbox
+  // This helps if the page refreshes or if the checkbox wasn't clickable initially
+  if (!window._humanVerificationInterval) {
+    window._humanVerificationInterval = setInterval(() => {
+      clickHumanVerificationCheckbox();
+    }, 2000); // Check every 2 seconds
+
+    // Clear the interval after 30 seconds to avoid indefinite checking
+    setTimeout(() => {
+      if (window._humanVerificationInterval) {
+        clearInterval(window._humanVerificationInterval);
+        window._humanVerificationInterval = null;
+        debugLog('Stopped periodic human verification checkbox checking');
+      }
+    }, 30000);
+  }
+}
+
+// Function to click the human verification checkbox
+function clickHumanVerificationCheckbox() {
+  // Look for the checkbox using the specific selector
+  const checkbox = document.querySelector('.cb-lb input[type="checkbox"]');
+
+  if (checkbox && !checkbox.checked) {
+    debugLog('Found human verification checkbox, clicking it');
+
+    // Simulate a more human-like click with a slight delay
+    setTimeout(() => {
+      try {
+        // Create and dispatch mouse events to simulate human interaction
+        // First move to the element
+        const moveEvent = new MouseEvent('mouseover', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        });
+        checkbox.dispatchEvent(moveEvent);
+
+        // Then click after a small delay
+        setTimeout(() => {
+          const clickEvent = new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window
+          });
+          checkbox.dispatchEvent(clickEvent);
+
+          // Show notification only if the click was successful
+          if (checkbox.checked) {
+            showNotification('✅ Human verification checkbox clicked automatically', 3000);
+            debugLog('Successfully clicked human verification checkbox');
+          } else {
+            // If direct event dispatch didn't work, try the regular click
+            checkbox.click();
+            if (checkbox.checked) {
+              showNotification('✅ Human verification checkbox clicked automatically', 3000);
+              debugLog('Successfully clicked human verification checkbox (fallback method)');
+            } else {
+              debugLog('Failed to check the human verification checkbox');
+            }
+          }
+        }, 150); // Small delay between mouseover and click
+      } catch (error) {
+        debugLog('Error clicking human verification checkbox:', { error: error.toString() });
+      }
+    }, 100 + Math.random() * 200); // Random delay between 100-300ms to seem more human-like
+  }
+}
+
 // Function to check the current page and handle accordingly
 function checkAndHandlePage() {
   // Give the page some time to fully load
@@ -115,7 +210,10 @@ function checkAndHandlePage() {
     // Check if auto login is enabled
     chrome.storage.local.get(['autoLoginEnabled'], (result) => {
       if (result.autoLoginEnabled) {
-        if (isOnLoginPage()) {
+        if (isOnHumanVerificationPage()) {
+          debugLog('On "Verify you are human" page, handling verification');
+          handleHumanVerificationPage();
+        } else if (isOnLoginPage()) {
           debugLog('On login page, performing login');
           performLogin();
         } else if (isOnSecurityQuestionsPage()) {
@@ -2065,19 +2163,75 @@ function checkForCloudflareCheckbox() {
       // Add more selectors if needed
     ];
 
+    // Check if we're on the "Verify you are human" page
+    const verifyHumanLabel = document.querySelector('.cb-lb span.cb-lb-t');
+    const verifyHumanText = verifyHumanLabel ? verifyHumanLabel.textContent.trim() : '';
+    const isVerifyHumanPage = verifyHumanText === 'Verify you are human';
+
+    if (isVerifyHumanPage) {
+      // If we're on the human verification page, also check if we need to handle it
+      if (!window._humanVerificationHandled) {
+        debugLog('Detected "Verify you are human" page via Cloudflare observer');
+        showNotification('🔍 Detected "Verify you are human" page, clicking checkbox...');
+        window._humanVerificationHandled = true;
+
+        // Set up periodic checking for the checkbox
+        if (!window._humanVerificationInterval) {
+          window._humanVerificationInterval = setInterval(() => {
+            clickHumanVerificationCheckbox();
+          }, 2000); // Check every 2 seconds
+
+          // Clear the interval after 30 seconds to avoid indefinite checking
+          setTimeout(() => {
+            if (window._humanVerificationInterval) {
+              clearInterval(window._humanVerificationInterval);
+              window._humanVerificationInterval = null;
+              window._humanVerificationHandled = false; // Reset so we can handle it again if needed
+              debugLog('Stopped periodic human verification checkbox checking');
+            }
+          }, 30000);
+        }
+      }
+    }
+
     for (const selector of selectors) {
       const checkbox = document.querySelector(selector);
       if (checkbox && !checkbox.checked) {
         debugLog('Found Cloudflare Turnstile checkbox, clicking it');
 
-        // Click the checkbox
-        try {
-          checkbox.click();
-          showNotification('✅ Cloudflare verification checkbox clicked automatically', 3000);
-          debugLog('Successfully clicked Cloudflare checkbox');
-        } catch (error) {
-          debugLog('Error clicking Cloudflare checkbox:', { error: error.toString() });
-        }
+        // Click the checkbox with a slight delay to simulate human behavior
+        setTimeout(() => {
+          try {
+            // Create and dispatch mouse events to simulate human interaction
+            // First move to the element
+            const moveEvent = new MouseEvent('mouseover', {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            checkbox.dispatchEvent(moveEvent);
+
+            // Then click after a small delay
+            setTimeout(() => {
+              const clickEvent = new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window
+              });
+              checkbox.dispatchEvent(clickEvent);
+
+              // If direct event dispatch didn't work, try the regular click
+              if (!checkbox.checked) {
+                checkbox.click();
+              }
+
+              showNotification('✅ Cloudflare verification checkbox clicked automatically', 3000);
+              debugLog('Successfully clicked Cloudflare checkbox');
+            }, 150); // Small delay between mouseover and click
+          } catch (error) {
+            debugLog('Error clicking Cloudflare checkbox:', { error: error.toString() });
+          }
+        }, 100 + Math.random() * 200); // Random delay between 100-300ms to seem more human-like
 
         // Only try to click one checkbox
         break;

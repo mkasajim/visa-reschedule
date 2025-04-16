@@ -11,7 +11,10 @@ function debugLog(message, data = null) {
 }
 
 // Flag to track if Cloudflare observer is active
-let cloudflareObserverActive = false;
+// Using window property to avoid duplicate declaration issues
+if (typeof window._cloudflareObserverActive === 'undefined') {
+  window._cloudflareObserverActive = false;
+}
 
 // Initialize captcha counter from storage
 let captchaCounter = 0;
@@ -2107,7 +2110,7 @@ async function waitForTimeSelection() {
 // Function to initialize Cloudflare Turnstile observer
 function initCloudflareObserver() {
   // Check if observer is already active
-  if (cloudflareObserverActive) {
+  if (window._cloudflareObserverActive) {
     debugLog('Cloudflare observer already active, skipping initialization');
     return;
   }
@@ -2122,7 +2125,7 @@ function initCloudflareObserver() {
     }
 
     debugLog('Setting up Cloudflare Turnstile observer');
-    cloudflareObserverActive = true;
+    window._cloudflareObserverActive = true;
 
     // Create a mutation observer to watch for Cloudflare elements
     const observer = new MutationObserver((mutations) => {
